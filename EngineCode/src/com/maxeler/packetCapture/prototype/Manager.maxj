@@ -1,0 +1,15 @@
+package com.maxeler.packetCapture.prototype;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.networking.v1.managers.NetworkManager;
+
+public class Manager extends NetworkManager
+{
+
+	public Manager( EngineParameters configuration )
+	{
+		super(configuration);
+		// TODO Auto-generated constructor stub
+	}
+
+}

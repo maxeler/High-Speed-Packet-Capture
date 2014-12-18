@@ -1,0 +1,14 @@
+package com.maxeler.packetCapture.prototype;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+
+public class CaptureKernel extends Kernel
+{
+	protected CaptureKernel( KernelParameters parameters )
+	{
+		super(parameters);
+		// TODO Auto-generated constructor stub
+	}
+
+}

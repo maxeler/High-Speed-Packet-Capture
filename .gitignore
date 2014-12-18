@@ -1,0 +1,15 @@
+#.maxproject
+#*.cproject
+EngineCode/.classpath
+#*.project
+CPUCode/Makefile.files.include
+EngineCode/bin/
+RunRules/*/.maxcompiler-activity.be
+RunRules/*/binaries
+RunRules/*/build.log
+RunRules/*/debug
+RunRules/*/include
+RunRules/*/maxfiles
+RunRules/*/objects
+RunRules/*/Makefile
+RunRules/*/Makefile.rules
