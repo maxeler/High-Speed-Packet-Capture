@@ -1,15 +1,49 @@
 package com.maxeler.packetCapture.prototype;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 import com.maxeler.networking.v1.managers.NetworkManager;
 
 public class Manager extends NetworkManager
 {
+	public static void main( String[] args )
+	{
+		EngineParameters params = new EngineParameters();
+		Manager manager = new Manager(params);
+
+		manager.createSLiCinterface(createInterface());
+		manager.debug.setDebugLevel(new DebugLevel(){{this.setHasStreamStatus(true);}});
+
+		manager.build();
+	}
 
 	public Manager( EngineParameters configuration )
 	{
 		super(configuration);
-		// TODO Auto-generated constructor stub
+
+		Kernel captureKernel = new CaptureKernel(makeKernelParameters("captureKernel"));
+		KernelBlock captureBlock = addKernel(captureKernel);
+
+		captureBlock.getInput("input") <== addStreamFromCPU("input");
+		addStreamToCPU("output") <== captureBlock.getOutput("output");
 	}
 
+	public static EngineInterface createInterface( )
+	{
+		EngineInterface ei = new EngineInterface();
+
+		CPUTypes type = CPUTypes.UINT32;
+		InterfaceParam length = ei.addParam("length", CPUTypes.UINT64);
+		InterfaceParam size = (length * type.sizeInBytes());
+
+		ei.setStream("input", type, size);
+		ei.setStream("output", type, size);
+
+		return ei;
+	}
 }

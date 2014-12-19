@@ -2,13 +2,25 @@ package com.maxeler.packetCapture.prototype;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.DelimiterMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 
 public class CaptureKernel extends Kernel
 {
+	private static final DFEType type = dfeUInt(32);
+
 	protected CaptureKernel( KernelParameters parameters )
 	{
 		super(parameters);
-		// TODO Auto-generated constructor stub
+
+		this.flush.disabled();
+		NonBlockingInput<DFEVar> in = this.io.nonBlockingInput("input", type, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.TRICKLING);
+		DFEVar out = this.io.output("output", type, in.valid);
+
+		out <== in.data;
 	}
 
 }

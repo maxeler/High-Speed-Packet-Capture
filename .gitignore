@@ -13,3 +13,4 @@ RunRules/*/maxfiles
 RunRules/*/objects
 RunRules/*/Makefile
 RunRules/*/Makefile.rules
+RunRules/*/*_Build.xml
