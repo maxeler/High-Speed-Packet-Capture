@@ -70,7 +70,7 @@ public class CaptureManager extends CustomManager
 //		Kernel memKernel = new MemoryKernel(makeKernelParameters("captureKernel"));
 //		KernelBlock memBlock = addKernel(memKernel);
 
-		DFELink toMem = addStreamToOnCardMemory("toMem", captureBlock.getOutput("cmdStream"));
+		DFELink toMem = addStreamToOnCardMemory("toMem", MemoryControlGroup.MemoryAccessPattern.LINEAR_1D);
 		DFELink output = captureBlock.getOutput("output");
 		toMem <== output;
 

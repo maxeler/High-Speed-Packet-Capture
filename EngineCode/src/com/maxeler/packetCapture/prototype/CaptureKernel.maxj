@@ -2,7 +2,6 @@ package com.maxeler.packetCapture.prototype;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.LMemCommandStream;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.DelimiterMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput;
@@ -26,13 +25,6 @@ class CaptureKernel extends Kernel
 		CounterChain chain = control.count.makeCounterChain(in.valid);
 		DFEVar burstCount = chain.addCounter(totalBursts,1);
 		DFEVar wordCount = chain.addCounter(wordsPerBurst,1);
-		LMemCommandStream.makeKernelOutput("cmdStream",
-				(wordCount === 0) & in.valid,    // control
-				burstCount,                      // address
-				constant.var(dfeUInt(8), 1),      // size
-				constant.var(dfeUInt(1), 0),      // inc
-				constant.var(dfeUInt(1), 0),      // stream
-				constant.var(false));
 
 		in.valid.simWatch("valid");
 		burstCount.simWatch("burstCount");
