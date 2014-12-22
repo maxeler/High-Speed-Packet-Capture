@@ -1,0 +1,32 @@
+package com.maxeler.packetCapture.prototype;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.LMemCommandStream;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+public class MemoryKernel extends Kernel
+{
+
+	protected MemoryKernel( KernelParameters parameters )
+	{
+		super(parameters);
+		flush.disabled();
+
+		DFEVar totalBursts = io.scalarInput("totalBursts",dfeUInt(32));
+
+		CounterChain chain = control.count.makeCounterChain();
+		DFEVar burstCount = chain.addCounter(totalBursts,1);
+		burstCount.simWatch("burstCount");
+
+		LMemCommandStream.makeKernelOutput("cmdStream",
+				constant.var(true),                 // control
+				burstCount,                      // address
+				constant.var(dfeUInt(8), 1),      // size
+				constant.var(dfeUInt(1), 0),      // inc
+				constant.var(dfeUInt(1), 0),      // stream
+				constant.var(false));
+	}
+
+}

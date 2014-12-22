@@ -2,25 +2,43 @@ package com.maxeler.packetCapture.prototype;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.LMemCommandStream;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.DelimiterMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
-import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 
-public class CaptureKernel extends Kernel
+class CaptureKernel extends Kernel
 {
-	private static final DFEType type = dfeUInt(32);
 
-	protected CaptureKernel( KernelParameters parameters )
+	CaptureKernel( KernelParameters parameters )
 	{
 		super(parameters);
-
 		this.flush.disabled();
-		NonBlockingInput<DFEVar> in = this.io.nonBlockingInput("input", type, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.TRICKLING);
-		DFEVar out = this.io.output("output", type, in.valid);
 
-		out <== in.data;
+		NonBlockingInput<DFEVar> in = io.nonBlockingInput("input", dfeUInt(32), constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING );
+
+		// memory cmd
+		DFEVar totalBursts = io.scalarInput("totalBursts",dfeUInt(32));
+		DFEVar wordsPerBurst = io.scalarInput("wordsPerBurst",dfeUInt(32));
+
+		CounterChain chain = control.count.makeCounterChain(in.valid);
+		DFEVar burstCount = chain.addCounter(totalBursts,1);
+		DFEVar wordCount = chain.addCounter(wordsPerBurst,1);
+		LMemCommandStream.makeKernelOutput("cmdStream",
+				(wordCount === 0) & in.valid,    // control
+				burstCount,                      // address
+				constant.var(dfeUInt(8), 1),      // size
+				constant.var(dfeUInt(1), 0),      // inc
+				constant.var(dfeUInt(1), 0),      // stream
+				constant.var(false));
+
+		in.valid.simWatch("valid");
+		burstCount.simWatch("burstCount");
+		wordCount.simWatch("wordCount");
+		in.data.simWatch("data");
+
+		io.output("output", in.data, dfeUInt(32), in.valid);
 	}
-
 }

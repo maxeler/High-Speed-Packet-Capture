@@ -22,7 +22,7 @@
                 <isset property="args"/>
             </not>
         </condition>
-        <java classname="com.maxeler.packetCapture.prototype.Manager" fork="true" failonerror="false" resultproperty="java.result">
+        <java classname="com.maxeler.packetCapture.prototype.CaptureManager" fork="true" failonerror="false" resultproperty="java.result">
             <env key="MAXSOURCEDIRS" value="src"/>
             <jvmarg value="-Xmx2048m"/>
             <arg line="${args}"/>
@@ -55,9 +55,9 @@
         <copy includeemptydirs="false" todir="../RunRules/Simulation/dist/jar">
             <fileset dir="../RunRules/Simulation/dist/bin" excludes="**/*.uad, **/*.ucd, **/*.uld, **/*.upd, **/*.udd, **/*.uod, **/*.usd, **/*.utd, **/*.uud, **/*.odd, **/*.ead, **/*.ecd, **/*.eld, **/*.epd, **/*.edd, **/*.eod, **/*.esd, **/*.etd, **/*.eud, **/*.urd*.uml, **/*.ecore, **/*.launch, **/*.java, **/*.maxj, **/package.html"/>
         </copy>
-        <jar destfile="Manager.jar" basedir="../RunRules/Simulation/dist/jar">
+        <jar destfile="CaptureManager.jar" basedir="../RunRules/Simulation/dist/jar">
             <manifest>
-                <attribute name="Main-Class" value="com.maxeler.packetCapture.prototype.Manager"/>
+                <attribute name="Main-Class" value="com.maxeler.packetCapture.prototype.CaptureManager"/>
             </manifest>
         </jar>
     </target>
