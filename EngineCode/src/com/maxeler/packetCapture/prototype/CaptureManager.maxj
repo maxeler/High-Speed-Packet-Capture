@@ -2,7 +2,6 @@ package com.maxeler.packetCapture.prototype;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
-import com.maxeler.maxcompiler.v2.managers._Managers;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
@@ -12,32 +11,11 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
-import com.maxeler.maxdc.Platform;
-import com.maxeler.maxeleros.platforms.MAX2Board;
-import com.maxeler.maxeleros.platforms.MAX4MAIABoard;
-import com.maxeler.maxeleros.platforms.MAX4NBoard;
-import com.maxeler.utils.Memory;
 
 public class CaptureManager extends CustomManager
 {
 	private static final CPUTypes DATA_TYPE = CPUTypes.UINT32;
-
-	private int getDefaultBurstMode() {
-		if(_Managers.getBuildManager(this).getPlatform() instanceof MAX2Board)
-			return 4;
-		else
-			return 8;
-	}
-
-	public int getBurstSize() {
-		/* The standard manager will always use the default memory controller configuration
-		 * because the user is not able to set a custom one.
-		 * */
-		Platform<?,?> platform = _Managers.getBuildManager(this).getPlatform();
-		boolean magicECC = platform instanceof MAX4MAIABoard || platform instanceof MAX4NBoard;
-		return Memory.getAdjustedBurstSize(this.getMemoryWordSize(platform) * getDefaultBurstMode(), 72, magicECC, magicECC, false);
-
-	}
+	private static final CPUTypes ADDR_TYPE = CPUTypes.UINT64;
 
 	public static void main( String[] args )
 	{
@@ -46,11 +24,10 @@ public class CaptureManager extends CustomManager
 
 		manager.createSLiCinterface(createCaptureInterface());
 		manager.createSLiCinterface(createReadInterface());
+		manager.createSLiCinterface(createHeadInterface());
+		manager.createSLiCinterface(createTailInterface());
 
 		manager.debug.setDebugLevel(new DebugLevel(){{this.setHasStreamStatus(true);}});
-
-		System.out.println("burst mode: " + manager.getDefaultBurstMode() );
-		System.out.println("burst size: " + manager.getBurstSize() );
 
 		manager.build();
 	}
@@ -86,10 +63,10 @@ public class CaptureManager extends CustomManager
 
 		InterfaceParam length = ei.addParam("length", CPUTypes.UINT64);
 		InterfaceParam size = (length * DATA_TYPE.sizeInBytes());
-		InterfaceParam baseAddr = (ei.addConstant(0) * DATA_TYPE.sizeInBytes());
+		InterfaceParam baseAddr = ei.addConstant(0);
 
 		InterfaceParam burstSize = ei.addParam("burstSize", CPUTypes.UINT32);
-		InterfaceParam memSizeBursts = ei.addParam("memSizeBursts", CPUTypes.UINT32);
+		InterfaceParam memSizeBursts = ei.addParam("memSizeBursts", ADDR_TYPE);
 		InterfaceParam tailAddr = ei.addParam("tailAddr", CPUTypes.UINT32);
 
 		ei.setScalar("captureKernel", "wordsPerBurst", (burstSize/DATA_TYPE.sizeInBytes()));
@@ -104,15 +81,39 @@ public class CaptureManager extends CustomManager
 		return ei;
 	}
 
+	public static EngineInterface createHeadInterface( )
+	{
+		EngineInterface ei = new EngineInterface("getHead");
+
+		ei.ignoreAll(Direction.IN_OUT);
+		ei.unignoreScalar("captureKernel", "headAddr");
+
+		return ei;
+	}
+
+	public static EngineInterface createTailInterface( )
+	{
+		EngineInterface ei = new EngineInterface("setTail");
+
+		InterfaceParam tailAddr = ei.addParam("tailAddr", ADDR_TYPE);
+		ei.setScalar("captureKernel", "tailAddr", tailAddr);
+
+		ei.ignoreAll(Direction.IN_OUT);
+
+		return ei;
+	}
+
 	public static EngineInterface createReadInterface( )
 	{
 		EngineInterface ei = new EngineInterface("read");
 
-		InterfaceParam length = ei.addParam("length", CPUTypes.UINT64);
+		InterfaceParam length = ei.addParam("length", ADDR_TYPE);
 		InterfaceParam size = (length * DATA_TYPE.sizeInBytes());
-		InterfaceParam baseAddr = (ei.addConstant(0) * DATA_TYPE.sizeInBytes());
+		InterfaceParam burstSize = ei.addParam("burstSize", CPUTypes.UINT32);
+		InterfaceParam tailAddr = ei.addParam("tailAddr", ADDR_TYPE);
+		InterfaceParam baseOffset = tailAddr * burstSize;
 
-		ei.setLMemLinear("fromMem", baseAddr, size);
+		ei.setLMemLinear("fromMem", baseOffset, size);
 		ei.setStream("toCpu", DATA_TYPE, size);
 
 		ei.ignoreAll(Direction.IN_OUT);
