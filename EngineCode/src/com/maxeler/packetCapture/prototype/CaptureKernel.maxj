@@ -2,6 +2,8 @@ package com.maxeler.packetCapture.prototype;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Params;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.WrapMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.DelimiterMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput;
@@ -17,20 +19,30 @@ class CaptureKernel extends Kernel
 		this.flush.disabled();
 
 		NonBlockingInput<DFEVar> in = io.nonBlockingInput("input", dfeUInt(32), constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING );
-
-		// memory cmd
-		DFEVar totalBursts = io.scalarInput("totalBursts",dfeUInt(32));
+		DFEVar tailAddr = io.scalarInput("tailAddr", dfeUInt(32));
+		DFEVar addrMax = io.scalarInput("addrMax",dfeUInt(32));
 		DFEVar wordsPerBurst = io.scalarInput("wordsPerBurst",dfeUInt(32));
 
 		CounterChain chain = control.count.makeCounterChain(in.valid);
-		DFEVar burstCount = chain.addCounter(totalBursts,1);
-		DFEVar wordCount = chain.addCounter(wordsPerBurst,1);
+		DFEVar headAddr = chain.addCounter(addrMax, 1);
+		DFEVar wordCount = chain.addCounter(wordsPerBurst, 1);
+
+		// initial edge case where head == tail. Usually this would mean memory is full but
+		// at start memory is empty so ignore until first head != tail
+		Params params = control.count.makeParams(1).withWrapMode(WrapMode.STOP_AT_MAX).withEnable(tailAddr !== headAddr);
+		DFEVar tailAddrValid = control.count.makeCounter(params).getCount() !== 0;
+
+		DFEVar memAvailable = (tailAddr < headAddr) | (tailAddrValid !== 1);
+		DFEVar doOutput = in.valid & memAvailable;
 
 		in.valid.simWatch("valid");
-		burstCount.simWatch("burstCount");
+		memAvailable.simWatch("memAvailable");
+		doOutput.simWatch("doOutput");
+		tailAddr.simWatch("tailAddr");
+		headAddr.simWatch("headAddr");
 		wordCount.simWatch("wordCount");
 		in.data.simWatch("data");
 
-		io.output("output", in.data, dfeUInt(32), in.valid);
+		io.output("output", in.data, dfeUInt(32), doOutput);
 	}
 }

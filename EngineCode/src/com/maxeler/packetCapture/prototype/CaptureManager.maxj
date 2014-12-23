@@ -89,9 +89,12 @@ public class CaptureManager extends CustomManager
 		InterfaceParam baseAddr = (ei.addConstant(0) * DATA_TYPE.sizeInBytes());
 
 		InterfaceParam burstSize = ei.addParam("burstSize", CPUTypes.UINT32);
+		InterfaceParam memSizeBursts = ei.addParam("memSizeBursts", CPUTypes.UINT32);
+		InterfaceParam tailAddr = ei.addParam("tailAddr", CPUTypes.UINT32);
 
-		ei.setScalar("captureKernel", "totalBursts", (size/burstSize));
 		ei.setScalar("captureKernel", "wordsPerBurst", (burstSize/DATA_TYPE.sizeInBytes()));
+		ei.setScalar("captureKernel", "addrMax", memSizeBursts);
+		ei.setScalar("captureKernel", "tailAddr", tailAddr);
 
 		ei.setLMemLinear("toMem", baseAddr, size);
 		ei.setStream("fromCpu", DATA_TYPE, size);
