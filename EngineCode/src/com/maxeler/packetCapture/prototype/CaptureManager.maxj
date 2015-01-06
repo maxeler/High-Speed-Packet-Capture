@@ -44,10 +44,10 @@ public class CaptureManager extends CustomManager
 		DFELink input = captureBlock.getInput("input");
 		input <== fromCpu;
 
-//		Kernel memKernel = new MemoryKernel(makeKernelParameters("captureKernel"));
-//		KernelBlock memBlock = addKernel(memKernel);
+		Kernel memKernel = new MemoryKernel(makeKernelParameters("memKernel"));
+		KernelBlock memBlock = addKernel(memKernel);
 
-		DFELink toMem = addStreamToOnCardMemory("toMem", MemoryControlGroup.MemoryAccessPattern.LINEAR_1D);
+		DFELink toMem = addStreamToOnCardMemory("toMem", memBlock.getOutput("cmdStream"));
 		DFELink output = captureBlock.getOutput("output");
 		toMem <== output;
 
@@ -68,12 +68,18 @@ public class CaptureManager extends CustomManager
 		InterfaceParam burstSize = ei.addParam("burstSize", CPUTypes.UINT32);
 		InterfaceParam memSizeBursts = ei.addParam("memSizeBursts", ADDR_TYPE);
 		InterfaceParam tailAddr = ei.addParam("tailAddr", CPUTypes.UINT32);
+		InterfaceParam wordsPerBurst = (burstSize/DATA_TYPE.sizeInBytes());
 
-		ei.setScalar("captureKernel", "wordsPerBurst", (burstSize/DATA_TYPE.sizeInBytes()));
+		InterfaceParam totalBursts = size / burstSize;
+		ei.setScalar("memKernel", "totalBursts", totalBursts);
+		ei.setScalar("memKernel", "wordsPerBurst", wordsPerBurst);
+
+		ei.setScalar("captureKernel", "wordsPerBurst", wordsPerBurst);
 		ei.setScalar("captureKernel", "addrMax", memSizeBursts);
 		ei.setScalar("captureKernel", "tailAddr", tailAddr);
 
-		ei.setLMemLinear("toMem", baseAddr, size);
+//		ei.setLMemLinear("toMem", baseAddr, size);
+		ei.setLMemInterruptOn("toMem");
 		ei.setStream("fromCpu", DATA_TYPE, size);
 
 		ei.ignoreAll(Direction.IN_OUT);
