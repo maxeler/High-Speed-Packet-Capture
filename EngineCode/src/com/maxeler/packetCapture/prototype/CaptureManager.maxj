@@ -2,17 +2,16 @@ package com.maxeler.packetCapture.prototype;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
-import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
-import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MemoryControlGroup;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+import com.maxeler.networking.v1.managers.NetworkManager;
 
-public class CaptureManager extends CustomManager
+public class CaptureManager extends NetworkManager
 {
 	private static final CPUTypes DATA_TYPE = CPUTypes.UINT32;
 	private static final CPUTypes ADDR_TYPE = CPUTypes.UINT64;
@@ -44,15 +43,18 @@ public class CaptureManager extends CustomManager
 		DFELink input = captureBlock.getInput("input");
 		input <== fromCpu;
 
-		Kernel memKernel = new MemoryKernel(makeKernelParameters("memKernel"));
-		KernelBlock memBlock = addKernel(memKernel);
+		Kernel addrWriteKernel = new MemoryKernel(makeKernelParameters("addrWriteKernel"));
+		KernelBlock addrWriteBlock = addKernel(addrWriteKernel);
 
-		DFELink toMem = addStreamToOnCardMemory("toMem", memBlock.getOutput("cmdStream"));
+		DFELink toMem = addStreamToOnCardMemory("toMem", addrWriteBlock.getOutput("cmdStream"));
 		DFELink output = captureBlock.getOutput("output");
 		toMem <== output;
 
 		// lmem read
-		DFELink fromMem = addStreamFromOnCardMemory("fromMem", MemoryControlGroup.MemoryAccessPattern.LINEAR_1D);
+		Kernel addrReadKernel = new MemoryKernel(makeKernelParameters("addrReadKernel"));
+		KernelBlock addrReadBlock = addKernel(addrReadKernel);
+
+		DFELink fromMem = addStreamFromOnCardMemory("fromMem", addrReadBlock.getOutput("cmdStream"));
 		DFELink toCpu = addStreamToCPU("toCpu");
 		toCpu <== fromMem;
 	}
@@ -63,7 +65,7 @@ public class CaptureManager extends CustomManager
 
 		InterfaceParam length = ei.addParam("length", CPUTypes.UINT64);
 		InterfaceParam size = (length * DATA_TYPE.sizeInBytes());
-		InterfaceParam baseAddr = ei.addConstant(0);
+		InterfaceParam startAddr = ei.addConstant(0);
 
 		InterfaceParam burstSize = ei.addParam("burstSize", CPUTypes.UINT32);
 		InterfaceParam memSizeBursts = ei.addParam("memSizeBursts", ADDR_TYPE);
@@ -71,15 +73,15 @@ public class CaptureManager extends CustomManager
 		InterfaceParam wordsPerBurst = (burstSize/DATA_TYPE.sizeInBytes());
 
 		InterfaceParam totalBursts = size / burstSize;
-		ei.setScalar("memKernel", "totalBursts", totalBursts);
-		ei.setScalar("memKernel", "wordsPerBurst", wordsPerBurst);
+		ei.setScalar("addrWriteKernel", "startAddr", startAddr);
+		ei.setScalar("addrWriteKernel", "totalBursts", totalBursts);
+		ei.setScalar("addrWriteKernel", "wordsPerBurst", wordsPerBurst);
+		ei.setLMemInterruptOn("toMem");
 
 		ei.setScalar("captureKernel", "wordsPerBurst", wordsPerBurst);
 		ei.setScalar("captureKernel", "addrMax", memSizeBursts);
 		ei.setScalar("captureKernel", "tailAddr", tailAddr);
 
-//		ei.setLMemLinear("toMem", baseAddr, size);
-		ei.setLMemInterruptOn("toMem");
 		ei.setStream("fromCpu", DATA_TYPE, size);
 
 		ei.ignoreAll(Direction.IN_OUT);
@@ -117,10 +119,17 @@ public class CaptureManager extends CustomManager
 		InterfaceParam size = (length * DATA_TYPE.sizeInBytes());
 		InterfaceParam burstSize = ei.addParam("burstSize", CPUTypes.UINT32);
 		InterfaceParam tailAddr = ei.addParam("tailAddr", ADDR_TYPE);
-		InterfaceParam baseOffset = tailAddr * burstSize;
 
-		ei.setLMemLinear("fromMem", baseOffset, size);
 		ei.setStream("toCpu", DATA_TYPE, size);
+
+		ei.ignoreAll(Direction.IN_OUT);
+
+		InterfaceParam totalBursts = size / burstSize;
+		InterfaceParam wordsPerBurst = (burstSize/DATA_TYPE.sizeInBytes());
+		ei.setScalar("addrReadKernel", "startAddr", tailAddr);
+		ei.setScalar("addrReadKernel", "totalBursts", totalBursts);
+		ei.setScalar("addrReadKernel", "wordsPerBurst", wordsPerBurst);
+		ei.setLMemInterruptOn("fromMem");
 
 		ei.ignoreAll(Direction.IN_OUT);
 

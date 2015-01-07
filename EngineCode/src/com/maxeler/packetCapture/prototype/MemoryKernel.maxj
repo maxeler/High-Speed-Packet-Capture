@@ -14,6 +14,7 @@ public class MemoryKernel extends Kernel
 		super(parameters);
 		flush.disabled();
 
+		DFEVar startAddr = io.scalarInput("startAddr", dfeUInt(32));
 		DFEVar totalBursts = io.scalarInput("totalBursts", dfeUInt(32));
 		DFEVar wordsPerBurst = io.scalarInput("wordsPerBurst", dfeUInt(32));
 
@@ -27,12 +28,12 @@ public class MemoryKernel extends Kernel
 		wordCount.simWatch("wordCount");
 
 		LMemCommandStream.makeKernelOutput("cmdStream",
-				wordCount === 0,                 // control
-				burstCount,                      // address
-				constant.var(dfeUInt(8), 1),      // size
-				constant.var(dfeUInt(1), 0),      // inc
-				constant.var(dfeUInt(1), 0),      // stream
-				burstCount === (totalBursts - 1));			// signal
+				(wordCount === 0 & (burstCount < totalBursts)), // control
+				startAddr + burstCount,                         // address
+				constant.var(dfeUInt(8), 1),                    // size
+				constant.var(dfeUInt(1), 0),                    // inc
+				constant.var(dfeUInt(1), 0),                    // stream
+				burstCount === (totalBursts - 1));              // signal
 	}
 
 }
