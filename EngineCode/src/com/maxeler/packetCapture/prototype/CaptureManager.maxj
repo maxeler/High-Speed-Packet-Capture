@@ -1,20 +1,27 @@
 package com.maxeler.packetCapture.prototype;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
-import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFETypeFactory;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
-import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+import com.maxeler.networking.statemachines.superfifo.SuperFIFO;
+import com.maxeler.networking.statemachines.superfifo.SuperFIFO.FifoIO;
 import com.maxeler.networking.v1.managers.NetworkManager;
+import com.maxeler.networking.v1.managers.netlib.EthernetChecksumMode;
+import com.maxeler.networking.v1.managers.netlib.EthernetStream;
+import com.maxeler.networking.v1.managers.netlib.Max4NetworkConnection;
+import com.maxeler.utils.MemoryManager;
 
 public class CaptureManager extends NetworkManager
 {
-	private static final CPUTypes DATA_TYPE = CPUTypes.UINT32;
-	private static final CPUTypes ADDR_TYPE = CPUTypes.UINT64;
+	private static final int DATA_TYPE_SIZE = 48;
+	private static final DFEType DATA_TYPE = DFETypeFactory.dfeUInt(DATA_TYPE_SIZE * 8);
+	private static final long FIFO_DEPTH = 1024 * 1024L;
 
 	public static void main( String[] args )
 	{
@@ -23,8 +30,6 @@ public class CaptureManager extends NetworkManager
 
 		manager.createSLiCinterface(createCaptureInterface());
 		manager.createSLiCinterface(createReadInterface());
-		manager.createSLiCinterface(createHeadInterface());
-		manager.createSLiCinterface(createTailInterface());
 
 		manager.debug.setDebugLevel(new DebugLevel(){{this.setHasStreamStatus(true);}});
 
@@ -35,76 +40,21 @@ public class CaptureManager extends NetworkManager
 	{
 		super(params);
 
-		// capture
-		Kernel captureKernel = new CaptureKernel(makeKernelParameters("captureKernel"));
-		KernelBlock captureBlock = addKernel(captureKernel);
-
-		DFELink fromCpu = addStreamFromCPU("fromCpu");
-		DFELink input = captureBlock.getInput("input");
-		input <== fromCpu;
-
-		Kernel addrWriteKernel = new MemoryKernel(makeKernelParameters("addrWriteKernel"));
-		KernelBlock addrWriteBlock = addKernel(addrWriteKernel);
-
-		DFELink toMem = addStreamToOnCardMemory("toMem", addrWriteBlock.getOutput("cmdStream"));
-		DFELink output = captureBlock.getOutput("output");
-		toMem <== output;
-
-		// lmem read
-		Kernel addrReadKernel = new MemoryKernel(makeKernelParameters("addrReadKernel"));
-		KernelBlock addrReadBlock = addKernel(addrReadKernel);
-
-		DFELink fromMem = addStreamFromOnCardMemory("fromMem", addrReadBlock.getOutput("cmdStream"));
+		EthernetStream dataCap1 = addEthernetStream("dataIn1", Max4NetworkConnection.QSFP_TOP_10G_PORT1, EthernetChecksumMode.DropBadFrames);
 		DFELink toCpu = addStreamToCPU("toCpu");
-		toCpu <== fromMem;
+
+		MemoryManager lmemOrganizer = new MemoryManager(this);
+		System.out.println("DATA_TYPE: " + DATA_TYPE);
+		System.out.println("FIFO_DEPTH: " + FIFO_DEPTH);
+		FifoIO io = SuperFIFO.create(this, "captureFifo", DATA_TYPE, FIFO_DEPTH, lmemOrganizer);
+
+		io.write <== dataCap1.getReceiveStream();
+		toCpu <== io.read;
 	}
 
 	public static EngineInterface createCaptureInterface( )
 	{
 		EngineInterface ei = new EngineInterface("capture");
-
-		InterfaceParam length = ei.addParam("length", CPUTypes.UINT64);
-		InterfaceParam size = (length * DATA_TYPE.sizeInBytes());
-		InterfaceParam startAddr = ei.addConstant(0);
-
-		InterfaceParam burstSize = ei.addParam("burstSize", CPUTypes.UINT32);
-		InterfaceParam memSizeBursts = ei.addParam("memSizeBursts", ADDR_TYPE);
-		InterfaceParam tailAddr = ei.addParam("tailAddr", CPUTypes.UINT32);
-		InterfaceParam wordsPerBurst = (burstSize/DATA_TYPE.sizeInBytes());
-
-		InterfaceParam totalBursts = size / burstSize;
-		ei.setScalar("addrWriteKernel", "startAddr", startAddr);
-		ei.setScalar("addrWriteKernel", "totalBursts", totalBursts);
-		ei.setScalar("addrWriteKernel", "wordsPerBurst", wordsPerBurst);
-		ei.setLMemInterruptOn("toMem");
-
-		ei.setScalar("captureKernel", "wordsPerBurst", wordsPerBurst);
-		ei.setScalar("captureKernel", "addrMax", memSizeBursts);
-		ei.setScalar("captureKernel", "tailAddr", tailAddr);
-
-		ei.setStream("fromCpu", DATA_TYPE, size);
-
-		ei.ignoreAll(Direction.IN_OUT);
-
-		return ei;
-	}
-
-	public static EngineInterface createHeadInterface( )
-	{
-		EngineInterface ei = new EngineInterface("getHead");
-
-		ei.ignoreAll(Direction.IN_OUT);
-		ei.unignoreScalar("captureKernel", "headAddr");
-
-		return ei;
-	}
-
-	public static EngineInterface createTailInterface( )
-	{
-		EngineInterface ei = new EngineInterface("setTail");
-
-		InterfaceParam tailAddr = ei.addParam("tailAddr", ADDR_TYPE);
-		ei.setScalar("captureKernel", "tailAddr", tailAddr);
 
 		ei.ignoreAll(Direction.IN_OUT);
 
@@ -115,24 +65,12 @@ public class CaptureManager extends NetworkManager
 	{
 		EngineInterface ei = new EngineInterface("read");
 
-		InterfaceParam length = ei.addParam("length", ADDR_TYPE);
-		InterfaceParam size = (length * DATA_TYPE.sizeInBytes());
-		InterfaceParam burstSize = ei.addParam("burstSize", CPUTypes.UINT32);
-		InterfaceParam tailAddr = ei.addParam("tailAddr", ADDR_TYPE);
+		InterfaceParam length = ei.addParam("length", CPUTypes.UINT64);
+		InterfaceParam size = (length * DATA_TYPE_SIZE);
 
-		ei.setStream("toCpu", DATA_TYPE, size);
+		ei.setStream("toCpu", CPUTypes.UINT64, size);
 
 		ei.ignoreAll(Direction.IN_OUT);
-
-		InterfaceParam totalBursts = size / burstSize;
-		InterfaceParam wordsPerBurst = (burstSize/DATA_TYPE.sizeInBytes());
-		ei.setScalar("addrReadKernel", "startAddr", tailAddr);
-		ei.setScalar("addrReadKernel", "totalBursts", totalBursts);
-		ei.setScalar("addrReadKernel", "wordsPerBurst", wordsPerBurst);
-		ei.setLMemInterruptOn("fromMem");
-
-		ei.ignoreAll(Direction.IN_OUT);
-
 		return ei;
 	}
 }
