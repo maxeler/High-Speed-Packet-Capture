@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project name="SimplePacketCapture_EngineCode_run_script" default="all" basedir="../../EngineCode">
     <property environment="env"/>
+    <condition property="maxcompilerdirpath" value="${env.MAXCOMPILERJCP}">
+        <isset property="env.MAXCOMPILERJCP"/>
+    </condition>
+    <condition property="maxcompilerdirpath" value="${env.MAXCOMPILERDIR}/lib/MaxCompiler.jar">
+        <not>
+            <isset property="maxcompilerdirpath"/>
+        </not>
+    </condition>
     <condition property="EnvClassPath" value="${env.CLASSPATH}">
         <isset property="env.CLASSPATH"/>
     </condition>
@@ -21,7 +29,7 @@
             <classpath>
                 <pathelement path="${env.ANT_MAXELER_INTERNAL_MAXIDE_JARS}"/>
                 <pathelement path="../RunRules/Simulation/dist/bin"/>
-                <pathelement path="/local-scratch/mwilson/clean_checkouts/maxelercore/maxeda/bin"/>
+                <pathelement path="${maxcompilerdirpath}"/>
                 <pathelement path="${EnvClassPath}"/>
             </classpath>
         </java>

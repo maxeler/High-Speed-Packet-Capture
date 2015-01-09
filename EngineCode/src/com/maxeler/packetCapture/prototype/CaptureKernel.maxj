@@ -2,54 +2,74 @@ package com.maxeler.packetCapture.prototype;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.Reductions;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Params;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.WrapMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.DelimiterMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.utils.MathUtils;
 
+// packs as many rx frames into burst size and pad the remaining with EOF
 class CaptureKernel extends Kernel
 {
+	static final int CAPTURE_TYPE_SIZE = 64; // eth frame size
 
-	CaptureKernel( KernelParameters parameters )
+	CaptureKernel( KernelParameters parameters, int outputSize )
 	{
 		super(parameters);
 		this.flush.disabled();
 
-		NonBlockingInput<DFEVar> in = io.nonBlockingInput("input", dfeUInt(32), constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING );
-		DFEVar tailAddr = io.scalarInput("tailAddr", dfeUInt(64));
-		DFEVar addrMax = io.scalarInput("addrMax",dfeUInt(64));
-		DFEVar wordsPerBurst = io.scalarInput("wordsPerBurst",dfeUInt(32));
+		DFEType captureType = dfeRawBits(CAPTURE_TYPE_SIZE);
+		DFEType outputType = dfeRawBits(outputSize);
 
-		Params params = control.count.makeParams(wordsPerBurst.getType().getTotalBits()).withMax(wordsPerBurst).withEnable(in.valid);
-		Counter wordCounter = control.count.makeCounter(params);
-		params = control.count.makeParams(addrMax.getType().getTotalBits()).withMax(addrMax).withEnable(wordCounter.getWrap()).withInitValue(0);
-		Counter headCounter = control.count.makeCounter(params);
-		DFEVar headAddr = headCounter.getCount();
+		int dataLen = outputSize / CAPTURE_TYPE_SIZE;
+		if( dataLen == 0 )
+		{
+			throw new Error("dataLen > 0");
+		}
+		reportInfo("dataLen = " + dataLen);
 
-//		CounterChain chain = control.count.makeCounterChain(in.valid);
-//		DFEVar headAddr = chain.addCounter(addrMax, 1);
-//		DFEVar wordCount = chain.addCounter(wordsPerBurst, 1);
+		NonBlockingInput<DFEVar> inRaw = io.nonBlockingInput("input", captureType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING );
+		DFEVar inputEnable = inRaw.valid;
+		inputEnable.simWatch("inputEnable");
 
-		// initial edge case where head == tail. Usually this would mean memory is full but
-		// at start memory is empty
-		params = control.count.makeParams(1).withWrapMode(WrapMode.STOP_AT_MAX).withEnable(tailAddr !== headAddr);
-		DFEVar tailAddrValid = control.count.makeCounter(params).getCount() !== 0;
+		// only keep track of valid data
+		DFEVar in = Reductions.streamHold(inRaw.data, inputEnable);
 
-		DFEVar memAvailable = (tailAddr !== headAddr) | (tailAddrValid !== 1);
-		DFEVar doOutput = in.valid & memAvailable;
+		// append data
+		DFEVar data = stream.offset(in, (dataLen - 1));
+		for( int i=dataLen-2; i>=0; i-- )
+		{
+			DFEVar datum = stream.offset(in, i);
+			datum.cast(captureType).simWatch("datum_" + i);
+			data = data.cat(datum);
+		}
 
-		in.valid.simWatch("valid");
-		memAvailable.simWatch("memAvailable");
-		doOutput.simWatch("doOutput");
-		tailAddr.simWatch("tailAddr");
-		headAddr.simWatch("headAddr");
-		wordCounter.getCount().simWatch("wordCount");
-		in.data.simWatch("data");
+		// pad
+		int paddingSize = outputType.getTotalBits() % captureType.getTotalBits();
+		if( paddingSize != 0 )
+		{ // padding necessary
+			reportInfo("Padding with " + paddingSize + "bits");
+			DFEType paddingType = dfeRawBits(paddingSize);
+			DFEVar padding = constant.var(paddingType, 0);
+			data = data.cat(padding);
+		}
 
-		io.output("output", in.data, dfeUInt(32), doOutput);
-		io.scalarOutput("headAddr", dfeUInt(64)) <== headAddr;
+		// output valid at non 0 multiples of dataLen
+		Params params = control.count.makeParams(MathUtils.bitsToRepresent(dataLen)).withEnable(inputEnable).withMax(dataLen);
+		Counter frameCounter = control.count.makeCounter(params);
+
+		DFEVar outputEnable = frameCounter.getCount() === 0 & inputEnable;
+		outputEnable.simWatch("outputEnable");
+
+		io.output("output", data, data.getType(), outputEnable);
+	}
+
+	private void reportInfo( String message )
+	{
+		System.out.println(this.getName() + ": " + message);
 	}
 }
