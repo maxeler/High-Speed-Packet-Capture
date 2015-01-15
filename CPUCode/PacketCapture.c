@@ -10,13 +10,15 @@
 #include "Maxfiles.h"
 #include "MaxSLiCInterface.h"
 
-static int FRAME_SIZE_BITS = 70;
+static int CHUNK_SIZE = 16;
 static int BURST_SIZE = 192;
-typedef struct __packed__
+typedef struct
 {
-	uint64_t upper;
-	uint64_t lower;
-} frame_data_t;
+	int sof;
+	int eof;
+	int mod;
+	uint64_t data;
+} frame_t;
 static uint64_t FRAME_DATA_MASK = 0x1F;
 
 // put 1 in bit range from from to from + width.
@@ -37,25 +39,28 @@ int main( int argc, char** argv )
 
 	int data_bursts = 1;
 	int data_size = data_bursts * BURST_SIZE;
-	int frames_len = (data_size * 8) / FRAME_SIZE_BITS;
+	int frames_len = data_size / CHUNK_SIZE;
 
-	/* capture */
-	// create data
-	int frame_size = (2 * sizeof(uint64_t));
-	int frames_size = frames_len * frame_size;
-
-	uint64_t* frames = malloc(frames_size);
-	for( int i=0; i<frames_len; i++ )
-	{
-		int frame_index = (2 * i);
-		frames[frame_index] = i%2 ==0? 0 : 0xFFFFFFFFFFFFFFFF; // lower word
-		frames[frame_index + 1] = i%2 ==0? 0 : 0xFFFFFFFFFFFFFFFF; // upper word
-		printf("frames[%d] = %"PRIu64"%"PRIu64"\n", frame_index, frames[frame_index + 1], frames[frame_index]);
-	}
-
-	// send
-	printf("Sending %d frames (%dB).\n", frames_len, frames_size);
-	PacketCapture_capture(frames_size, frames);
+//	/* capture */
+//	// create data
+//	int frame_size = (2 * sizeof(uint64_t));
+//	int frames_size = frames_len * frame_size;
+//
+//	uint64_t* frames = malloc(frames_size);
+//	for( int i=0; i<frames_len; i++ )
+//	{
+//		// set frame data
+//		int frame_index = (2 * i);
+//		// frame[64:70]
+//		frames[frame_index] = 0x6;
+//		// frame[0:64]
+//		frames[frame_index + 1] = i;
+//		printf("frames[%2d] = 0x%016"PRIx64".%016"PRIx64"\n", frame_index, frames[frame_index], frames[frame_index + 1]);
+//	}
+//
+//	// send
+//	printf("Sending %d frames (%dB).\n", frames_len, frames_size);
+//	PacketCapture_capture(frames_size, frames);
 
 	/* read */
 	while( 1 )
@@ -77,54 +82,24 @@ int main( int argc, char** argv )
 		}
 		printf("\n");
 
-		// shift by frame size until frame count reached
-		int prev_upper_chunk_bits = 0;
-		int word_bits = 64;
-		int chunk_bits = 70;
-
+		frame_t* frame = malloc(sizeof(*frame));
 		for( int i=0; i<frames_len; i++ )
 		{
 			printf("[frame = %d]\n", i);
-			printf("prev_upper_chunk_bits = %d\n", prev_upper_chunk_bits);
 
-			uint64_t* datum = &data[i];
+			int frame_index = (2 * i);
+			uint64_t* chunk = &data[frame_index];
+			printf("data = 0x%016"PRIx64".%016"PRIx64"\n", chunk[1], chunk[0]);
 
 
-
-			printf("datum[0]: 0x%"PRIx64"\n", datum[0]);
-			printf("datum[1]: 0x%"PRIx64"\n", datum[1]);
-
-			int lower_chunk_bits = (word_bits - prev_upper_chunk_bits);
-			int upper_chunk_bits = (chunk_bits - lower_chunk_bits);
-			printf("lower_chunk_bits = %d\n", lower_chunk_bits);
-			printf("upper_chunk_bits = %d\n", upper_chunk_bits);
-
-			// upper_chunk = datum[1][-upper_chunk_bits:]
-			uint64_t upper_chunk = datum[1] << (word_bits - upper_chunk_bits);
-			// lower_chunk = datum[0][:lower_chunk_bits]
-			uint64_t lower_chunk = datum[0] >> (word_bits - lower_chunk_bits);
-			// lower = upper_chunk[(word_bits - lower_chunk_bits):] # lower_chunk
-			uint64_t lower = (upper_chunk << (upper_chunk_bits - (word_bits - lower_chunk_bits))) | lower_chunk;
-			// upper = upper_chunk[:-(word_bits - lower_chunk_bits)]
-			uint64_t upper = upper_chunk >> ((word_bits - upper_chunk_bits) + (word_bits - lower_chunk_bits));
-
-			prev_upper_chunk_bits = upper_chunk_bits;
-
-			printf("upper_chunk: 0x%"PRIx64"\n", upper_chunk >> (word_bits - upper_chunk_bits));
-			printf("lower_chunk: 0x%"PRIx64"\n", lower_chunk);
-			printf("upper: 0x%"PRIx64"\n", upper);
-			printf("lower: 0x%"PRIx64"\n", lower);
-//
-//			uint64_t frame_data[2] = {upper, lower};
-//
-//			// print raw frame info
-//			printf("frame[%d][0]: 0x%"PRIx64"\n", i, frame_data[0]);
-//			printf("frame[%d][1]: 0x%"PRIx64"\n", i, frame_data[1]);
-//			// print frame info
-//			printf("frame[%d].data: 0x%"PRIx64"\n", i, frame_data[0]);
-//			printf("frame[%d].eof: %"PRIu64"\n", i, (frame_data[1] >> 0) & 0x1);
-//			printf("frame[%d].sof: %"PRIu64"\n", i, (frame_data[1] >> 1) & 0x1);
-//			printf("frame[%d].mod: %"PRIu64"\n", i, (frame_data[1] >> 2) & 0x7);
+			// print raw frame info
+			printf("frame[%d][0]: 0x%"PRIx64"\n", i, chunk[0]);
+			printf("frame[%d][1]: 0x%"PRIx64"\n", i, chunk[1]);
+			// print frame info
+			printf("frame[%d].data: 0x%"PRIx64"\n", i, chunk[0]);
+			printf("frame[%d].eof: %"PRIu64"\n", i, (chunk[1] >> 0) & 0x1);
+			printf("frame[%d].sof: %"PRIu64"\n", i, (chunk[1] >> 1) & 0x1);
+			printf("frame[%d].mod: %"PRIu64"\n", i, (chunk[1] >> 2) & 0x7);
 //
 			printf("\n");
 

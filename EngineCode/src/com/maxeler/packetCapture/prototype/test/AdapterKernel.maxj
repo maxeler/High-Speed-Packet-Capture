@@ -6,23 +6,69 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.DelimiterMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 
 public class AdapterKernel extends Kernel
 {
+	private static final int WORD_BITS = 64;
 
-	public AdapterKernel( KernelParameters parameters )
+	public AdapterKernel( KernelParameters parameters, int inputBits, int outputBits )
 	{
 		super(parameters);
 		this.flush.disabled();
 
-		NonBlockingInput<DFEVar> input = io.nonBlockingInput("input", dfeRawBits(128), constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
-		DFEVar data = input.data.slice(0, 70);
+		if( outputBits > inputBits )
+		{
+			throw new IllegalArgumentException("inputBits must be >= outputBits");
+		}
+
+		int wordsLen = inputBits / WORD_BITS;
+		if( (inputBits % WORD_BITS) != 0 )
+		{
+			throw new IllegalArgumentException("inputBits must be a multiple of wordBits");
+		}
+
+		DFEVectorType<DFEVar> vectorType = new DFEVectorType<DFEVar>(dfeRawBits(WORD_BITS), wordsLen);
+		NonBlockingInput<DFEVector<DFEVar>> input = io.nonBlockingInput("input", vectorType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
+
+		DFEVector<DFEVar> words = input.data;
+
+		// slice from lsb to msb
+		DFEVar data = null;
+		int bitsRead = 0;
+		for( int i=0; i<wordsLen; i++ )
+		{
+			DFEVar word = words.get(wordsLen - i - 1);
+			DFEVar chunk;
+			if( (bitsRead + WORD_BITS) > outputBits )
+			{ // last word
+				// append partial word (lsb to msb)
+				int bitsRem = outputBits - bitsRead;
+				chunk = word.slice(0, bitsRem);
+			}
+			else // (bitsRead + WORD_BITS) <= outputBits
+			{ // not last word
+				// append whole word
+				chunk = word;
+			}
+
+			if( i == 0 )
+			{
+				data = chunk;
+			}
+			else // i != 0
+			{
+				data = chunk.cat(data);
+			}
+			bitsRead += WORD_BITS;
+		}
 
 		input.valid.simWatch("valid");
 		input.data.simWatch("input");
 		data.simWatch("data");
 
-		io.output("output", data, dfeRawBits(70), input.valid);
+		io.output("output", data, dfeRawBits(outputBits), input.valid);
 	}
 
 }

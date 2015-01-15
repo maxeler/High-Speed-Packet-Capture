@@ -13,11 +13,15 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 import com.maxeler.networking.statemachines.superfifo.DDRFifo;
 import com.maxeler.networking.statemachines.superfifo.SimpleWire;
 import com.maxeler.networking.v1.managers.NetworkManager;
-import com.maxeler.packetCapture.prototype.test.AdapterKernel;
+import com.maxeler.networking.v1.managers.netlib.EthernetChecksumMode;
+import com.maxeler.networking.v1.managers.netlib.EthernetStream;
+import com.maxeler.networking.v1.managers.netlib.Max4NetworkConnection;
 
 public class CaptureManager extends NetworkManager
 {
-	private static final int BURST_SIZE = 192;
+	private static final int FRAME_BITS = 70;
+	private static final int FRAME_CHUNK_BITS = 128;
+	private static final int BURST_BITS = 192;
 	private static final long FIFO_START = 0;
 	private static final long FIFO_DEPTH = 16 * 1024 * 1024;
 
@@ -60,20 +64,20 @@ public class CaptureManager extends NetworkManager
 		writeMemStream <== io.getOutput(DDRFifo.OUTPUT_MEM_DATA);
 		io.getInput(DDRFifo.INPUT_MEM_DATA) <== readMemStream;
 
-		KernelBlock adapterK = addKernel(new AdapterKernel(makeKernelParameters("adapterKernel")));
-		adapterK.getInput("input") <== addStreamFromCPU("captureIn");
+//		KernelBlock adapterK = addKernel(new AdapterKernel(makeKernelParameters("adapterKernel"), FRAME_CHUNK_BITS, FRAME_BITS));
+//		adapterK.getInput("input") <== addStreamFromCPU("captureIn");
 
-		KernelBlock captureK = addKernel(new CaptureKernel(makeKernelParameters("captureKernel"), BURST_SIZE * 8));
+		KernelBlock captureK = addKernel(new CaptureKernel(makeKernelParameters("captureKernel"), FRAME_BITS, FRAME_CHUNK_BITS));
 
 		// create capture input
-//		EthernetStream capturePort = addEthernetStream("dataIn", Max4NetworkConnection.QSFP_TOP_10G_PORT1, EthernetChecksumMode.DropBadFrames);
+		EthernetStream capturePort = addEthernetStream("dataIn", Max4NetworkConnection.QSFP_TOP_10G_PORT1, EthernetChecksumMode.DropBadFrames);
 
 		// create data output
 		DFELink toCpu = addStreamToCPU("toCpu");
 
 		// attach
-//		captureK.getInput("input") <== capturePort.getReceiveStream();
-		captureK.getInput("input") <== adapterK.getOutput("output");
+		captureK.getInput("input") <== capturePort.getReceiveStream();
+//		captureK.getInput("input") <== adapterK.getOutput("output");
 		io.getInput(DDRFifo.INPUT_DATA) <== captureK.getOutput("output");
 		toCpu <== io.getOutput(DDRFifo.OUTPUT_DATA);
 
@@ -83,9 +87,9 @@ public class CaptureManager extends NetworkManager
 	{
 		EngineInterface ei = new EngineInterface("capture");
 
-		InterfaceParam size = ei.addParam("size", CPUTypes.UINT64);
-
-		ei.setStream("captureIn", CPUTypes.UINT64, size);
+//		InterfaceParam size = ei.addParam("size", CPUTypes.UINT64);
+//
+//		ei.setStream("captureIn", CPUTypes.UINT64, size);
 
 		ei.ignoreAll(Direction.IN_OUT);
 
@@ -97,7 +101,7 @@ public class CaptureManager extends NetworkManager
 		EngineInterface ei = new EngineInterface("read");
 
 		InterfaceParam bursts = ei.addParam("bursts", CPUTypes.UINT64);
-		InterfaceParam size = (bursts * BURST_SIZE);
+		InterfaceParam size = (bursts * BURST_BITS);
 
 		ei.setStream("toCpu", CPUTypes.UINT64, size);
 
