@@ -45,6 +45,10 @@
 <ipAddressTwo/>
 <netmaskTwo/>
 <pcapFileTwo/>
-<max4v1net enabled="true"/>
+<max4v1net enabled="true">
+<max4v1Qsfp key="TOP" name="TOP">
+<max4v1Port index="1" pcapFile="/local-scratch/mwilson/projects/PacketCaptureApp/SimplePacketCapture/RunRules/Simulation/capture.pcap" tapIpAddress="172.0.0.2" tapNetmask="255.255.255.0" type="Type10G"/>
+</max4v1Qsfp>
+</max4v1net>
 </simulator>
 </buildProfile>

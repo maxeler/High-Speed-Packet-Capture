@@ -15,56 +15,91 @@ import com.maxeler.maxcompiler.v2.utils.MathUtils;
 // packs as many rx frames into burst size and pad the remaining with EOF
 class CaptureKernel extends Kernel
 {
-	static final int CAPTURE_TYPE_SIZE = 64; // eth frame size
+	static final int CAPTURE_TYPE_SIZE = 70; // eth frame size
 
 	CaptureKernel( KernelParameters parameters, int outputSize )
 	{
 		super(parameters);
 		this.flush.disabled();
 
-		DFEType captureType = dfeRawBits(CAPTURE_TYPE_SIZE);
+		DFEType captureType = dfeUInt(CAPTURE_TYPE_SIZE);
 		DFEType outputType = dfeRawBits(outputSize);
 
 		int dataLen = outputSize / CAPTURE_TYPE_SIZE;
+		reportInfo("dataLen = " + dataLen + " items");
 		if( dataLen == 0 )
 		{
-			throw new Error("dataLen > 0");
+			throw new Error("dataLen must be > 0");
 		}
-		reportInfo("dataLen = " + dataLen);
 
-		NonBlockingInput<DFEVar> inRaw = io.nonBlockingInput("input", captureType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING );
+		int paddingSize = outputType.getTotalBits() % captureType.getTotalBits();
+		reportInfo("padding = " + paddingSize + "b");
+
+
+		NonBlockingInput<DFEVar> inRaw = io.nonBlockingInput("input", captureType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
 		DFEVar inputEnable = inRaw.valid;
 		inputEnable.simWatch("inputEnable");
+
+		inRaw.data.simWatch("r");
+//		inRaw.data.slice(64).simWatch("r_eof");
+//		inRaw.data.slice(65).simWatch("r_sof");
+//		inRaw.data.slice(66, 3).simWatch("r_modulo");
+//		inRaw.data.slice(69).simWatch("r_checksum_bad");
 
 		// only keep track of valid data
 		DFEVar in = Reductions.streamHold(inRaw.data, inputEnable);
 
+		in.simWatch("d");
+//		in.slice(64).simWatch("d_eof");
+//		in.slice(65).simWatch("d_sof");
+//		in.slice(66, 3).simWatch("d_modulo");
+//		in.slice(69).simWatch("d_checksum_bad");
+
 		// append data
-		DFEVar data = stream.offset(in, (dataLen - 1));
-		for( int i=dataLen-2; i>=0; i-- )
+//		data.simWatch("d0");
+//		data.slice(64).simWatch("d"+0+"_eof");
+//		data.slice(65).simWatch("d"+0+"_sof");
+//		data.slice(66, 3).simWatch("d"+0+"_modulo");
+//		data.slice(69).simWatch("d"+0+"_checksum_bad");
+
+		DFEVar data = in;
+		for( int i=1; i<dataLen; i++ )
 		{
 			DFEVar datum = stream.offset(in, i);
-			datum.cast(captureType).simWatch("datum_" + i);
-			data = data.cat(datum);
+			datum.cast(dfeUInt(captureType.getTotalBits())).simWatch("d"+i);
+//			datum.slice(64).simWatch("d"+i+"_eof");
+//			datum.slice(65).simWatch("d"+i+"_sof");
+//			datum.slice(66, 3).simWatch("d"+i+"_modulo");
+//			datum.slice(69).simWatch("d"+i+"_checksum_bad");
+
+//			// reverse
+//			int numBits = datum.getType().getTotalBits();
+//			DFEVar datumRev = datum.slice(0);
+//			for( int j=1; j<numBits; j++ )
+//			{
+//				datumRev = datumRev.cat(datum.slice(j));
+//			}
+
+//			datum.cast(dfeUInt(captureType.getTotalBits())).simWatch("datum_" + i);
+			data = datum.cat(data);
 		}
 
 		// pad
-		int paddingSize = outputType.getTotalBits() % captureType.getTotalBits();
 		if( paddingSize != 0 )
-		{ // padding necessary
-			reportInfo("Padding with " + paddingSize + "bits");
+		{
 			DFEType paddingType = dfeRawBits(paddingSize);
 			DFEVar padding = constant.var(paddingType, 0);
-			data = data.cat(padding);
+			data = padding.cat(data);
 		}
 
-		// output valid at non 0 multiples of dataLen
+		// output valid at multiples of dataLen
 		Params params = control.count.makeParams(MathUtils.bitsToRepresent(dataLen)).withEnable(inputEnable).withMax(dataLen);
 		Counter frameCounter = control.count.makeCounter(params);
 
 		DFEVar outputEnable = frameCounter.getCount() === 0 & inputEnable;
 		outputEnable.simWatch("outputEnable");
 
+		data.simWatch("data");
 		io.output("output", data, data.getType(), outputEnable);
 	}
 

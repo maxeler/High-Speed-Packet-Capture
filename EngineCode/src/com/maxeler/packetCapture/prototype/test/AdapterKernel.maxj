@@ -1,0 +1,28 @@
+package com.maxeler.packetCapture.prototype.test;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.DelimiterMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+public class AdapterKernel extends Kernel
+{
+
+	public AdapterKernel( KernelParameters parameters )
+	{
+		super(parameters);
+		this.flush.disabled();
+
+		NonBlockingInput<DFEVar> input = io.nonBlockingInput("input", dfeRawBits(128), constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
+		DFEVar data = input.data.slice(0, 70);
+
+		input.valid.simWatch("valid");
+		input.data.simWatch("input");
+		data.simWatch("data");
+
+		io.output("output", data, dfeRawBits(70), input.valid);
+	}
+
+}
