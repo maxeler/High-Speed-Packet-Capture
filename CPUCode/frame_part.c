@@ -69,7 +69,7 @@ ssize_t frame_part_get_size( frame_part_t* part )
 	}
 	else // part->mod != 0
 	{
-		size = data_size - part->mod;
+		size = part->mod;
 	}
 
 	return size;

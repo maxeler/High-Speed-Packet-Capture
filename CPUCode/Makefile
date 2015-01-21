@@ -35,7 +35,6 @@ $(RUNRULE_DIR)/include/%.h:
 	$(MAKE) -C $(RUNRULE_DIR) include/$*.h
 
 runsim: build startsim run stopsim
-	
 
 .PRECIOUS: $(MAXFILES)
 

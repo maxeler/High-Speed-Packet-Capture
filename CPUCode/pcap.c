@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <assert.h>
+#include <string.h>
 
 #include "pcap.h"
 
@@ -27,7 +28,7 @@ struct pcap_frame_s
 {
 	frameh_t* header;
 	uint64_t* data;
-	uint32_t max_size;
+	uint32_t max_len;
 	int finalized;
 };
 
@@ -128,8 +129,8 @@ pcap_frame_t* pcap_frame_init( pcap_t* pcap, uint32_t ts_sec, uint32_t ts_usec )
 
 	pcap_frame_t* frame = malloc(sizeof(*frame));
 	frame->header = header;
-	frame->max_size = pcap->header->snaplen;
-	frame->data = malloc(frame->max_size);
+	frame->max_len = pcap->header->snaplen;
+	frame->data = malloc(frame->max_len);
 	frame->finalized = 0;
 	assert(frame->data != NULL);
 
@@ -150,10 +151,11 @@ void pcap_frame_append( pcap_frame_t* frame, const uint64_t* data, uint32_t size
 	frameh_t* header = frame->header;
 	header->orig_len += size;
 
-	if( header->incl_len < frame->max_size )
+	if( header->incl_len < frame->max_len )
 	{ // within snaplen
-		int index = header->incl_len % sizeof(*(frame->data));
-		frame->data[index] = *data;
+		int index = header->incl_len / sizeof(*(frame->data));
+		printf("index: %d\n", index);
+		memcpy(&frame->data[index], data, size);
 
 		header->incl_len += size;
 	}

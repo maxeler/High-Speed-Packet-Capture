@@ -26,15 +26,15 @@ class CaptureKernel extends Kernel
 		DFEVar inputEnable = in.valid;
 		DFEVar frame = in.data;
 
-		inputEnable.simWatch("inputEnable");
-		in.data.simWatch("input");
+//		inputEnable.simWatch("inputEnable");
+//		in.data.simWatch("input");
 
 		// pad
 		DFEType paddingType = dfeRawBits(paddingSize);
 		DFEVar padding = constant.var(paddingType, 0);
 		DFEVar chunk = padding.cat(frame);
 
-		chunk.simWatch("chunk");
+//		chunk.simWatch("chunk");
 		io.output("output", chunk, chunk.getType(), inputEnable);
 	}
 

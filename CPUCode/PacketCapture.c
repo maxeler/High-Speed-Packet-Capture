@@ -6,34 +6,22 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <time.h>
 
 #include "Maxfiles.h"
 #include "MaxSLiCInterface.h"
+#include "frame_part.h"
+#include "pcap.h"
+
 
 static int CHUNK_SIZE = 16;
 static int BURST_SIZE = 192;
-typedef struct
-{
-	int sof;
-	int eof;
-	int mod;
-	uint64_t data;
-} frame_t;
-static uint64_t FRAME_DATA_MASK = 0x1F;
-
-// put 1 in bit range from from to from + width.
-static uint64_t make_mask( int from, int width )
-{
-	assert(from + width < sizeof(uint64_t));
-
-	static uint64_t ONES = 0xFFFFFFFFFFFFFFFF;
-	int total_bits = sizeof(uint64_t) * 8;
-
-	return (ONES << (total_bits - width)) >> (total_bits - (from + width));
-}
 
 int main( int argc, char** argv )
 {
+
+	(void) argc;
+	(void) argv;
 
 //	max_file_t *maxfile = PacketCapture_init();
 
@@ -41,28 +29,12 @@ int main( int argc, char** argv )
 	int data_size = data_bursts * BURST_SIZE;
 	int frames_len = data_size / CHUNK_SIZE;
 
-//	/* capture */
-//	// create data
-//	int frame_size = (2 * sizeof(uint64_t));
-//	int frames_size = frames_len * frame_size;
-//
-//	uint64_t* frames = malloc(frames_size);
-//	for( int i=0; i<frames_len; i++ )
-//	{
-//		// set frame data
-//		int frame_index = (2 * i);
-//		// frame[64:70]
-//		frames[frame_index] = 0x6;
-//		// frame[0:64]
-//		frames[frame_index + 1] = i;
-//		printf("frames[%2d] = 0x%016"PRIx64".%016"PRIx64"\n", frame_index, frames[frame_index], frames[frame_index + 1]);
-//	}
-//
-//	// send
-//	printf("Sending %d frames (%dB).\n", frames_len, frames_size);
-//	PacketCapture_capture(frames_size, frames);
+	FILE* file = fopen("./capture.pcap", "w+");
+	pcap_t* pcap = pcap_create(file, 0, 1, 0, 65535);
+	assert(pcap != NULL);
 
 	/* read */
+	pcap_frame_t* frame = NULL;
 	while( 1 )
 	{
 		printf("Running read.\n");
@@ -82,29 +54,55 @@ int main( int argc, char** argv )
 		}
 		printf("\n");
 
-		frame_t* frame = malloc(sizeof(*frame));
 		for( int i=0; i<frames_len; i++ )
 		{
 			printf("[frame = %d]\n", i);
 
 			int frame_index = (2 * i);
-			uint64_t* chunk = &data[frame_index];
-			printf("data = 0x%016"PRIx64".%016"PRIx64"\n", chunk[1], chunk[0]);
+			uint64_t* frame_data = &data[frame_index];
+			printf("data = 0x%016"PRIx64".%016"PRIx64"\n", frame_data[1], frame_data[0]);
+			printf("frame[%d][0]: 0x%"PRIx64"\n", i, frame_data[0]);
+			printf("frame[%d][1]: 0x%"PRIx64"\n", i, frame_data[1]);
 
+			// parse frame part
+			frame_part_t* part = frame_part_parse(frame_data);
+			assert(part != NULL);
 
-			// print raw frame info
-			printf("frame[%d][0]: 0x%"PRIx64"\n", i, chunk[0]);
-			printf("frame[%d][1]: 0x%"PRIx64"\n", i, chunk[1]);
-			// print frame info
-			printf("frame[%d].data: 0x%"PRIx64"\n", i, chunk[0]);
-			printf("frame[%d].eof: %"PRIu64"\n", i, (chunk[1] >> 0) & 0x1);
-			printf("frame[%d].sof: %"PRIu64"\n", i, (chunk[1] >> 1) & 0x1);
-			printf("frame[%d].mod: %"PRIu64"\n", i, (chunk[1] >> 2) & 0x7);
-//
+			printf("part[%d].data: 0x%"PRIx64"\n", i, *frame_part_get_data(part));
+			printf("part[%d].eof: %d\n", i, frame_part_get_eof(part));
+			printf("part[%d].sof: %d\n", i, frame_part_get_sof(part));
+			printf("part[%d].size: %ldB\n", i, frame_part_get_size(part));
 			printf("\n");
 
+			// init frame
+			int sof = frame_part_get_sof(part);
+			int eof = frame_part_get_eof(part);
+			if( sof )
+			{
+				if( frame != NULL )
+				{
+					pcap_frame_free(frame);
+					frame = NULL;
+				}
+				frame = pcap_frame_init(pcap, time(NULL), 0);
+				assert(frame != NULL);
+			}
+
+			// build frame
+			const uint64_t* data = frame_part_get_data(part);
+			int size = frame_part_get_size(part);
+			pcap_frame_append(frame, data, size);
+
+			// write frame
+			if( eof )
+			{
+				pcap_frame_write(pcap, frame);
+				fflush(file);
+			}
+
+			frame_part_free(part);
+			part = NULL;
 		}
-		return 0;
 	}
 
 	return EXIT_SUCCESS;
