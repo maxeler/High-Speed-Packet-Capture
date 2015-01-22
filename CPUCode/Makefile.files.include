@@ -2,4 +2,4 @@
 # This file is managed by MaxIDE. Do NOT change.
 #
 HEADERS:= frame_part.h pcap.h 
-SOURCES:= PacketCapture.c frame_part.c pcap.c service_loop.c 
+SOURCES:= PacketCapture.c frame_part.c pcap.c 
