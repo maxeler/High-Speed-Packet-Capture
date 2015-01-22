@@ -2,7 +2,6 @@
 #*.cproject
 EngineCode/.classpath
 #*.project
-CPUCode/Makefile.files.include
 EngineCode/bin/
 RunRules/*/.maxcompiler-activity.be
 RunRules/*/binaries
