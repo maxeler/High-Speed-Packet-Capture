@@ -41,6 +41,9 @@ public class CaptureManager extends NetworkManager
 	public CaptureManager( EngineParameters params )
 	{
 		super(params);
+		int writeBits = BURST_BITS * 2;
+		int dataLen = writeBits / 128;
+		Types types = new Types(FRAME_BITS, 128, dataLen, writeBits);
 
 		// create ddr fifo
 		System.out.println("FIFO_DEPTH: " + FIFO_DEPTH);
@@ -67,7 +70,7 @@ public class CaptureManager extends NetworkManager
 //		KernelBlock adapterK = addKernel(new AdapterKernel(makeKernelParameters("adapterKernel"), FRAME_CHUNK_BITS, FRAME_BITS));
 //		adapterK.getInput("input") <== addStreamFromCPU("captureIn");
 
-		KernelBlock captureK = addKernel(new CaptureKernel(makeKernelParameters("captureKernel"), FRAME_BITS, FRAME_CHUNK_BITS));
+		KernelBlock captureK = addKernel(new CaptureKernel(makeKernelParameters("captureKernel"), types));
 
 		// create capture input
 		EthernetStream capturePort = addEthernetStream("dataIn", Max4NetworkConnection.QSFP_TOP_10G_PORT1, EthernetChecksumMode.DropBadFrames);

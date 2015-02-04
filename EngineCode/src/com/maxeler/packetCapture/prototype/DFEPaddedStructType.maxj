@@ -1,0 +1,62 @@
+package com.maxeler.packetCapture.prototype;
+
+import java.util.Arrays;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFETypeFactory;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType;
+
+public class DFEPaddedStructType extends DFEStructType
+{
+	public static final String PAD_KEY = "__PAD";
+	public final DFEType padType;
+
+	public DFEPaddedStructType( int padBits, StructFieldType... fields )
+	{
+		super(ctorHelper(padBits, fields));
+		if( padBits == 0 )
+		{
+			padType = null;
+		}
+		else
+		{
+			padType = DFETypeFactory.dfeRawBits(padBits);
+		}
+	}
+
+	public DFEStruct newPaddedInstance( KernelLib design )
+	{
+		DFEStruct inst = super.newInstance(design);
+
+		if( this.padType != null )
+		{
+			DFEVar zeros = this.padType.newInstance(design, 0);
+			inst.get(PAD_KEY) <== zeros;
+		}
+
+		return inst;
+	}
+
+	public String getPadKey()
+	{
+		return PAD_KEY;
+	}
+
+	private static StructFieldType[] ctorHelper( int padBits, StructFieldType[] fields )
+	{
+		if( padBits != 0 )
+		{
+			DFEType padType = DFETypeFactory.dfeRawBits(padBits);
+			StructFieldType[] newFields = Arrays.copyOf(fields, fields.length + 1);
+			newFields[newFields.length - 1] = sft(PAD_KEY, padType);
+			return newFields;
+		}
+		else
+		{
+			return fields;
+		}
+	}
+}

@@ -7,39 +7,25 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
 
 // packs as many rx frames into burst size and pad the remaining with EOF
 class CaptureKernel extends Kernel
 {
 
-	CaptureKernel( KernelParameters parameters, int inputBits, int outputBits )
+	CaptureKernel( KernelParameters parameters, Types types )
 	{
 		super(parameters);
 		this.flush.disabled();
 
-		DFEType captureType = dfeRawBits(inputBits);
-		int paddingSize = (outputBits - inputBits);
-		reportInfo("padding = " + paddingSize + "b");
+		DFEType frameChunkType = types.datumRawType;
+		DFEPaddedStructType frameChunkPaddedType = types.datumPaddedType;
+		DFEStruct frameChunkPadded = frameChunkPaddedType.newPaddedInstance(this);
 
+		NonBlockingInput<DFEVar> in = io.nonBlockingInput("input", frameChunkType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
 
-		NonBlockingInput<DFEVar> in = io.nonBlockingInput("input", captureType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
-		DFEVar inputEnable = in.valid;
-		DFEVar frame = in.data;
+		frameChunkPadded.get("datum") <== in.data;
 
-//		inputEnable.simWatch("inputEnable");
-//		in.data.simWatch("input");
-
-		// pad
-		DFEType paddingType = dfeRawBits(paddingSize);
-		DFEVar padding = constant.var(paddingType, 0);
-		DFEVar chunk = padding.cat(frame);
-
-//		chunk.simWatch("chunk");
-		io.output("output", chunk, chunk.getType(), inputEnable);
-	}
-
-	private void reportInfo( String message )
-	{
-		System.out.println(this.getName() + ": " + message);
+		io.output("output", frameChunkPadded, frameChunkPaddedType, in.valid);
 	}
 }
