@@ -2,6 +2,7 @@ package com.maxeler.packetCapture.prototype;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.Fanout;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.StateMachineBlock;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
@@ -16,6 +17,7 @@ import com.maxeler.networking.v1.managers.NetworkManager;
 import com.maxeler.networking.v1.managers.netlib.EthernetChecksumMode;
 import com.maxeler.networking.v1.managers.netlib.EthernetStream;
 import com.maxeler.networking.v1.managers.netlib.Max4NetworkConnection;
+import com.maxeler.networking.v1.managers.netlib.TCPStream;
 
 public class CaptureManager extends NetworkManager
 {
@@ -25,13 +27,18 @@ public class CaptureManager extends NetworkManager
 	private static final long FIFO_START = 0;
 	private static final long FIFO_DEPTH = 16 * 1024 * 1024;
 
+	private static final Max4NetworkConnection CAPTURE_PORT = Max4NetworkConnection.QSFP_TOP_10G_PORT1;
+	private static final Max4NetworkConnection SERVER_PORT = Max4NetworkConnection.QSFP_TOP_10G_PORT2;
+
 	public static void main( String[] args )
 	{
 		EngineParameters params = new EngineParameters(args);
 		CaptureManager manager = new CaptureManager(params);
 
 		manager.createSLiCinterface(createCaptureInterface());
+		manager.createSLiCinterface(createConfigSendInterface());
 		manager.createSLiCinterface(createReadInterface());
+
 
 		manager.debug.setDebugLevel(new DebugLevel(){{this.setHasStreamStatus(true);}});
 
@@ -43,7 +50,7 @@ public class CaptureManager extends NetworkManager
 		super(params);
 		int writeBits = BURST_BITS * 2;
 		int dataLen = writeBits / 128;
-		Types types = new Types(FRAME_BITS, 128, dataLen, writeBits);
+		Types types = new Types(128, dataLen, writeBits);
 
 		// create ddr fifo
 		System.out.println("FIFO_DEPTH: " + FIFO_DEPTH);
@@ -73,16 +80,26 @@ public class CaptureManager extends NetworkManager
 		KernelBlock captureK = addKernel(new CaptureKernel(makeKernelParameters("captureKernel"), types));
 
 		// create capture input
-		EthernetStream capturePort = addEthernetStream("dataIn", Max4NetworkConnection.QSFP_TOP_10G_PORT1, EthernetChecksumMode.DropBadFrames);
+		EthernetStream capturePort = addEthernetStream("dataIn", CAPTURE_PORT, EthernetChecksumMode.DropBadFrames);
 
 		// create data output
 		DFELink toCpu = addStreamToCPU("toCpu");
+		TCPStream tcpStream = addTCPStream("tcpServerStream", SERVER_PORT);
+		KernelBlock senderK = addKernel(new SenderKernel(makeKernelParameters("SenderK"), types));
 
 		// attach
 		captureK.getInput("input") <== capturePort.getReceiveStream();
 //		captureK.getInput("input") <== adapterK.getOutput("output");
-		io.getInput(DDRFifo.INPUT_DATA) <== captureK.getOutput("output");
-		toCpu <== io.getOutput(DDRFifo.OUTPUT_DATA);
+		io.getInput(DDRFifo.INPUT_DATA) <== captureK.getOutput("packedData");
+
+		Fanout dataFan = fanout("dataFan");
+		dataFan.getInput() <== io.getOutput(DDRFifo.OUTPUT_DATA);
+		toCpu <== dataFan.addOutput("cpu");
+
+		KernelBlock unpackerK = addKernel(new UnpackerKernel(makeKernelParameters("DataUnpackerKernel"), types));
+		unpackerK.getInput("packedData") <== dataFan.addOutput("kernel");
+		senderK.getInput("datumPadded") <== unpackerK.getOutput("data");
+		tcpStream.getTransmitStream() <== senderK.getOutput("datumFrame");
 
 	}
 
@@ -94,8 +111,20 @@ public class CaptureManager extends NetworkManager
 //
 //		ei.setStream("captureIn", CPUTypes.UINT64, size);
 
+		ei.route("dataFan -> cpu, dataFan -> kernel");
 		ei.ignoreAll(Direction.IN_OUT);
 
+		return ei;
+	}
+
+	public static EngineInterface createConfigSendInterface( )
+	{
+		EngineInterface ei = new EngineInterface("configSend");
+
+		InterfaceParam socket = ei.addParam("socket", CPUTypes.INT8);
+		ei.setScalar("SenderK", "socket", socket);
+
+		ei.ignoreAll(Direction.IN_OUT);
 		return ei;
 	}
 

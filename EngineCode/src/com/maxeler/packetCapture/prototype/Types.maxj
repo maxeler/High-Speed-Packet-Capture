@@ -1,0 +1,50 @@
+package com.maxeler.packetCapture.prototype;
+
+import static com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType.sft;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFETypeFactory;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.networking.types.EthernetRXType;
+
+public class Types
+{
+	public final EthernetRXType datumType;
+	public final DFEType datumRawType;
+	public final DFEPaddedStructType datumPaddedType;
+	public final DFEType datumPaddedRawType;
+	public final DFEVectorType<DFEVar>dataType;
+	public final DFEPaddedStructType dataPaddedType;
+
+	public Types( int datumPaddedBits, int dataLen, int dataPaddedBits )
+	{
+		datumType = new com.maxeler.networking.types.EthernetRXType();
+		int datumBits = datumType.getTotalBits();
+		int datumPadBits = datumPaddedBits - datumBits;
+		int dataPadBits = dataPaddedBits - (datumPaddedBits * dataLen);
+
+		report("datumBits = " + datumBits + "b");
+		report("datumPadBits = " + datumPadBits + "b");
+		report("datumPaddedBits = " + datumPaddedBits + "b");
+		report("dataLen = " + dataLen);
+		report("dataBits = " + (dataLen * datumPaddedBits) + "b");
+		report("dataPadBits = " + dataPadBits + "b");
+		report("dataPaddedBits = " + dataPaddedBits + "b");
+		report("datumBits = " + datumBits + "b");
+
+		// datum
+		datumRawType = DFETypeFactory.dfeRawBits(datumType.getTotalBits());
+		datumPaddedType = new DFEPaddedStructType(datumPadBits, sft("datum", datumType));
+		datumPaddedRawType = DFETypeFactory.dfeRawBits(datumPaddedType.getTotalBits());
+
+		// data
+		dataType = new DFEVectorType<DFEVar>(datumPaddedRawType, dataLen);
+		dataPaddedType = new DFEPaddedStructType(dataPadBits, sft("data", dataType));
+	}
+
+	private static void report( String msg )
+	{
+		System.out.println("Types: " + msg);
+	}
+}

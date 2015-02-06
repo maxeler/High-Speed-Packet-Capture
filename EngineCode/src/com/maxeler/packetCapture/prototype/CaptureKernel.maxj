@@ -5,9 +5,8 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.DelimiterMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
-import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
-import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.networking.types.EthernetRXType;
 
 // packs as many rx frames into burst size and pad the remaining with EOF
 class CaptureKernel extends Kernel
@@ -18,14 +17,14 @@ class CaptureKernel extends Kernel
 		super(parameters);
 		this.flush.disabled();
 
-		DFEType frameChunkType = types.datumRawType;
+		EthernetRXType frameChunkType = types.datumType;
 		DFEPaddedStructType frameChunkPaddedType = types.datumPaddedType;
 		DFEStruct frameChunkPadded = frameChunkPaddedType.newPaddedInstance(this);
 
-		NonBlockingInput<DFEVar> in = io.nonBlockingInput("input", frameChunkType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
+		NonBlockingInput<DFEStruct> in = io.nonBlockingInput("input", frameChunkType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
 
 		frameChunkPadded.get("datum") <== in.data;
 
-		io.output("output", frameChunkPadded, frameChunkPaddedType, in.valid);
+		io.output("packedData", frameChunkPadded, frameChunkPaddedType, in.valid);
 	}
 }

@@ -1,0 +1,69 @@
+package com.maxeler.packetCapture.prototype;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFETypeFactory;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.networking.v1.framed_kernels.ByteOrder;
+import com.maxeler.networking.v1.framed_kernels.FrameData;
+import com.maxeler.networking.v1.framed_kernels.FramedKernel;
+import com.maxeler.networking.v1.kernel_types.TCPType;
+import com.maxeler.packetCapture.prototype.old.BytePaddedFrameFormat;
+
+public class SenderKernel extends FramedKernel
+{
+	public SenderKernel( KernelParameters parameters, final Types types )
+	{
+		super(parameters);
+
+		DFEType socketType = DFETypeFactory.dfeUInt(8);
+
+		DFEVar frameReady = control.count.makeCounter(control.count.makeParams(128)).getCount() === 0;
+		frameReady.simWatch("frameReady");
+
+		DFEStruct datumPadded = io.input("datumPadded", types.datumPaddedType, frameReady);
+		DFEVar socket = io.scalarInput("socket", socketType);
+
+		socket.simWatch("socket");
+		datumPadded.simWatch("datumPadded");
+
+		class DatumFrame extends BytePaddedFrameFormat
+		{
+			DatumFrame( )
+			{
+				super(ByteOrder.LITTLE_ENDIAN);
+				addField("datum", dfeRawBits(128));
+//				addPadding();
+			}
+		}
+
+		DatumFrame datumFrame = new DatumFrame();
+		FrameData<DatumFrame> frame = new FrameData<DatumFrame>(this, datumFrame, new TCPType());
+		DFEVar datum = datumPadded.pack();
+		frame["datum"] <== datum;
+
+//		frame["datum"] <== constant.var(dfeRawBits(128), new Bits(128, "FFFFFFFFFFFFFF0123456789ABCDEFFF"));
+
+//		pushResetBetweenFrames(false);
+//		DFEVar count = control.count.makeCounter(control.count.makeParams(128)).getCount();
+//		popResetBetweenFrames();
+//		frame["datum"] <== count.pack();
+
+		frame["datum"].simWatch("datum");
+
+		frame.linkfield[TCPType.SOCKET] <== socket;
+//		if( datumFrame.isPadded() )
+//		{
+//			frame[DatumFrame.PAD_KEY] <== datumFrame.padType.newInstance(this, 0);
+//		}
+
+		io.frameOutput("datumFrame", frame);
+
+		for( String key : frame.getFramedFormat().getFieldNames() )
+		{
+			System.out.println(this.getName() + ": " + key + " = " + frame.get(key).getType().getTotalBits() + "b");
+		}
+	}
+
+}
