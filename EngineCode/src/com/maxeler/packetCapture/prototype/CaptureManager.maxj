@@ -96,10 +96,11 @@ public class CaptureManager extends NetworkManager
 		dataFan.getInput() <== io.getOutput(DDRFifo.OUTPUT_DATA);
 		toCpu <== dataFan.addOutput("cpu");
 
-		KernelBlock unpackerK = addKernel(new UnpackerKernel(makeKernelParameters("DataUnpackerKernel"), types));
+		KernelBlock unpackerK = addKernel(new DataUnpackerKernel(makeKernelParameters("DataUnpackerKernel"), types));
 		unpackerK.getInput("packedData") <== dataFan.addOutput("kernel");
+
 		senderK.getInput("datumPadded") <== unpackerK.getOutput("data");
-		tcpStream.getTransmitStream() <== senderK.getOutput("datumFrame");
+		tcpStream.getTransmitStream() <== senderK.getOutput("frame");
 
 	}
 

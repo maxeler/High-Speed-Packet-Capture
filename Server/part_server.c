@@ -20,6 +20,11 @@ static void report_errno( const char* msg, int errnum )
 	fprintf(stderr, "%s: %s (errno=%d)\n", msg, strerror(errnum), errnum);
 }
 
+enum read_mode_e
+{
+	READ_MODE_META,
+	READ_MODE_DATA,
+};
 
 int main( int argv, char* argc[] )
 {
@@ -31,6 +36,9 @@ int main( int argv, char* argc[] )
 	const char* LOCAL_ADDR = "5.5.5.1";
 	const int LOCAL_PORT = 2511;
 	const int NUM_CONECTIONS = 1;
+	const int TCP_SIZE_MAX = 1500;
+	const int META_SIZE = 1;
+	const int DATA_SIZE_MAX = 8;
 
 	int error;
 
@@ -76,14 +84,17 @@ int main( int argv, char* argc[] )
 		return EXIT_FAILURE;
 	}
 
-	uint64_t buffer[2];
+	uint8_t* buffer = malloc(TCP_SIZE_MAX);
+	memset(buffer, 0, TCP_SIZE_MAX);
 
 	int connection_fd = accept(sock_num, NULL, 0);
 	printf("connection_fd= %d\n", connection_fd);
 
+	ssize_t read_size = META_SIZE;
+	enum read_mode_e read_mode = READ_MODE_META;
 	while( 1 )
 	{
-		ssize_t nbytes = read(connection_fd, buffer, sizeof(buffer));
+		ssize_t nbytes = read(connection_fd, buffer, read_size);
 
 		if( nbytes == -1 )
 		{
@@ -91,22 +102,33 @@ int main( int argv, char* argc[] )
 			return EXIT_FAILURE;
 		}
 
-		if( nbytes != sizeof(buffer) )
+		printf("read %ldB: 0x", nbytes);
+		for( int i=0; (i * sizeof(*buffer))<nbytes; i++ )
 		{
-			fprintf(stderr, "Unexpected data\n");
-			return EXIT_FAILURE;
+			printf(".%02"PRIx8, buffer[i]);
+		}
+		printf("\n");
+
+		if( read_mode == READ_MODE_META )
+		{
+			// extract next read size
+			int sof = (buffer[0] >> 0) & 0x1;
+			int eof = (buffer[0] >> 1) & 0x1;
+			int mod = (buffer[0] >> 2) & 0x3;
+
+			printf("meta (sof=%d, eof=%d, mod=%d)\n", sof, eof, mod);
+
+			read_mode = READ_MODE_DATA;
+			read_size = (mod == 0) ? DATA_SIZE_MAX : mod;
+		}
+		else
+		{
+			printf("data\n");
+			read_mode = READ_MODE_META;
+			read_size = META_SIZE;
 		}
 
-		uint8_t eof = (buffer[1] >> 0) & 0x1;
-		uint8_t sof = (buffer[1] >> 1) & 0x1;
-		uint8_t mod = (buffer[1] >> 2) & 0x7;
-		uint64_t data = buffer[0];
-
-		printf("read %ldB: 0x%016"PRIx64".%016"PRIx64"\n", nbytes, buffer[1], buffer[0]);
-		printf("[sof=%"PRIu8", eof=%"PRIu8", mod=%"PRIu8", data=0x%016"PRIx64"]\n", sof, eof, mod, data);
-
-		buffer[0] = 0;
-		buffer[1] = 0;
+		memset(buffer, 0, TCP_SIZE_MAX);
 	}
 
 	return 0;
