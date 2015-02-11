@@ -17,6 +17,7 @@
 static int CHUNK_SIZE = 16;
 static int BURST_SIZE = 192;
 static int SERVER_PORT = 2511;
+static int SERVER_COUNT = 2;
 
 static void dfe_configure_interface( max_engine_t* engine, max_net_connection_t interface, const char* ip, const char* netmask )
 {
@@ -30,23 +31,6 @@ static void dfe_configure_interface( max_engine_t* engine, max_net_connection_t 
 	inet_aton(netmask, &netmask_addr);
 
 	max_ip_config(engine, interface, &ip_addr, &netmask_addr);
-}
-
-static max_tcp_socket_t* dfe_create_sockets( max_engine_t* engine, const char* stream, const char* ip, int port )
-{
-	assert(engine != NULL);
-
-	max_tcp_socket_t* socket = max_tcp_create_socket(engine, stream);
-
-	struct in_addr ip_addr;
-	inet_aton(ip, &ip_addr);
-
-	max_tcp_connect(socket, &ip_addr, port);
-
-	printf("Waiting for socket state: MAX_TCP_STATE_ESTABLISHED\n");
-	max_tcp_await_state(socket, MAX_TCP_STATE_ESTABLISHED, NULL);
-
-	return socket;
 }
 
 int main( int argc, char** argv )
@@ -67,17 +51,58 @@ int main( int argc, char** argv )
 	pcap_t* pcap = pcap_create(file, 0, 1, 0, 65535);
 	assert(pcap != NULL);
 
-	/* init */
-	dfe_configure_interface(engine, MAX_NET_CONNECTION_QSFP_TOP_10G_PORT2, "5.5.5.2", "255.255.255.0");
-	max_tcp_socket_t* socket = dfe_create_sockets(engine, "tcpServerStream", "5.5.5.1", SERVER_PORT);
-	uint8_t socket_num = max_tcp_get_socket_number(socket);
+	/* init dfe */
+	dfe_configure_interface(engine, MAX_NET_CONNECTION_QSFP_TOP_10G_PORT2, "5.5.5.1", "255.255.255.0");
 
-	PacketCapture_configSend_actions_t config_send_action =
+	/* init clients */
+	const char* server_addrs[] =
 	{
-		.param_socket = socket_num,
+		"5.5.5.2",
+		"5.5.5.3",
 	};
-	PacketCapture_configSend_run(engine, &config_send_action);
 
+	// create sockets
+	max_tcp_socket_t* sockets[SERVER_COUNT];
+	uint8_t socket_nums[SERVER_COUNT];
+	for( int i=0; i<SERVER_COUNT; i++ )
+	{
+		max_tcp_socket_t* sock = max_tcp_create_socket(engine, "serverStream");
+		uint8_t socket_num = max_tcp_get_socket_number(sock);
+
+		sockets[i] = sock;
+		socket_nums[i] = socket_num;
+	}
+
+	// connect sockets
+	for( int i=0; i<SERVER_COUNT; i++ )
+	{
+		const char* ip = server_addrs[i];
+		max_tcp_socket_t* sock = sockets[i];
+
+		struct in_addr ip_addr;
+		inet_aton(ip, &ip_addr);
+
+		printf("Connecting to server %s...\n", ip);
+		max_tcp_connect(sock, &ip_addr, SERVER_PORT);
+	}
+
+	// wait for sockets to connect
+	for( int i=0; i<SERVER_COUNT; i++ )
+	{
+		const char* ip = server_addrs[i];
+		max_tcp_socket_t* sock = sockets[i];
+
+		printf("Waiting for socket (%s) state: MAX_TCP_STATE_ESTABLISHED\n", ip);
+		max_tcp_await_state(sock, MAX_TCP_STATE_ESTABLISHED, NULL);
+	}
+
+	PacketCapture_configServers_actions_t config_servers_action =
+	{
+		.param_sockets = socket_nums
+	};
+	PacketCapture_configServers_run(engine, &config_servers_action);
+
+	/* init cpu */
 	PacketCapture_capture_run(engine, NULL);
 
 	/* read */

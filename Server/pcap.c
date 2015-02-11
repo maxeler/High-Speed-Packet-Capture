@@ -64,7 +64,6 @@ static int frameh_write( packeth_t* header, FILE* file )
 
 static int frame_data_write( const uint64_t* data, ssize_t size, FILE* file )
 {
-	// todo: impl
 	printf("SIZE: %ldB\n", size);
 	int words = ceil(size/8.0);
 	for( int i=0; i<words; i++ )
@@ -155,7 +154,6 @@ void pcap_packet_append( pcap_packet_t* packet, const uint64_t* data, uint32_t s
 	if( header->incl_len < packet->max_len )
 	{ // within snaplen
 		int index = header->incl_len / sizeof(*(packet->data));
-		printf("index: %d\n", index);
 		memcpy(&packet->data[index], data, size);
 
 		header->incl_len += size;

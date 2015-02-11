@@ -11,6 +11,7 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParamArray;
 import com.maxeler.networking.statemachines.superfifo.DDRFifo;
 import com.maxeler.networking.statemachines.superfifo.SimpleWire;
 import com.maxeler.networking.v1.managers.NetworkManager;
@@ -26,17 +27,19 @@ public class CaptureManager extends NetworkManager
 	private static final int BURST_BITS = 192;
 	private static final long FIFO_START = 0;
 	private static final long FIFO_DEPTH = 16 * 1024 * 1024;
+	private static final int CLIENT_COUNT = 2;
 
 	private static final Max4NetworkConnection CAPTURE_PORT = Max4NetworkConnection.QSFP_TOP_10G_PORT1;
 	private static final Max4NetworkConnection SERVER_PORT = Max4NetworkConnection.QSFP_TOP_10G_PORT2;
 
 	public static void main( String[] args )
 	{
+
 		EngineParameters params = new EngineParameters(args);
 		CaptureManager manager = new CaptureManager(params);
 
 		manager.createSLiCinterface(createCaptureInterface());
-		manager.createSLiCinterface(createConfigSendInterface());
+		manager.createSLiCinterface(createConfigServersInterface(CLIENT_COUNT));
 		manager.createSLiCinterface(createReadInterface());
 
 
@@ -84,8 +87,8 @@ public class CaptureManager extends NetworkManager
 
 		// create data output
 		DFELink toCpu = addStreamToCPU("toCpu");
-		TCPStream tcpStream = addTCPStream("tcpServerStream", SERVER_PORT);
-		KernelBlock senderK = addKernel(new SenderKernel(makeKernelParameters("SenderK"), types));
+		TCPStream serverStream = addTCPStream("serverStream", SERVER_PORT);
+		KernelBlock senderK = addKernel(new LoadBalancedSenderKernel(makeKernelParameters("SenderK"), types, CLIENT_COUNT));
 
 		// attach
 		captureK.getInput("input") <== capturePort.getReceiveStream();
@@ -100,7 +103,7 @@ public class CaptureManager extends NetworkManager
 		unpackerK.getInput("packedData") <== dataFan.addOutput("kernel");
 
 		senderK.getInput("datumPadded") <== unpackerK.getOutput("data");
-		tcpStream.getTransmitStream() <== senderK.getOutput("frame");
+		serverStream.getTransmitStream() <== senderK.getOutput("frame");
 
 	}
 
@@ -118,12 +121,17 @@ public class CaptureManager extends NetworkManager
 		return ei;
 	}
 
-	public static EngineInterface createConfigSendInterface( )
+	public static EngineInterface createConfigServersInterface( int clientCount )
 	{
-		EngineInterface ei = new EngineInterface("configSend");
+		EngineInterface ei = new EngineInterface("configServers");
 
-		InterfaceParam socket = ei.addParam("socket", CPUTypes.INT8);
-		ei.setScalar("SenderK", "socket", socket);
+		InterfaceParamArray sockets = ei.addParamArray("sockets", CPUTypes.UINT8);
+		for( int i=0; i<clientCount; i++ )
+		{
+			InterfaceParam socket = sockets.get(i);
+			String name = "socket" + i;
+			ei.setScalar("SenderK", name, socket);
+		}
 
 		ei.ignoreAll(Direction.IN_OUT);
 		return ei;

@@ -1,5 +1,5 @@
 /*
- * capture_client.c
+ * capture_server.c
  *
  */
 
@@ -74,13 +74,8 @@ void process_frame( pcap_t* pcap, frame_t* frame )
 	}
 }
 
-int main( int argv, char* argc[] )
+int main( int argc, char* argv[] )
 {
-	(void) argc;
-	(void) argv;
-
-	const char* LOCAL_ADDR = "5.5.5.1";
-	const int LOCAL_PORT = 2511;
 	const int NUM_CONECTIONS = 1;
 	const int HEADER_SIZE = 1;
 	const int DATA_SIZE_MAX = 8;
@@ -88,8 +83,21 @@ int main( int argv, char* argc[] )
 
 	int error;
 
+	// parse args
+	// TODO: parse safely/properly
+	if( argc != 4 )
+	{
+		fprintf(stderr, "%s: ip port file.pcap", argv[0]);
+		return EXIT_FAILURE;
+	}
+
+	const char* ip = argv[1];
+	const int port = strtol(argv[2], NULL, 10);
+	const char* filePath = argv[3];
+
+
 	// init pcap
-	FILE* file = fopen("./capture.pcap", "w+");
+	FILE* file = fopen(filePath, "w+");
 	pcap_t* pcap = pcap_create(file, 0, 1, 0, 65535);
 	assert(pcap != NULL);
 
@@ -111,11 +119,11 @@ int main( int argv, char* argc[] )
 
 	struct sockaddr_in addr = {0};
 	addr.sin_family = AF_INET;
-	addr.sin_port = htons(LOCAL_PORT);
-	int status = inet_aton(LOCAL_ADDR, &addr.sin_addr);
+	addr.sin_port = htons(port);
+	int status = inet_aton(ip, &addr.sin_addr);
 	if( status == 0 )
 	{
-		report_errno("inet_aton", errno);
+		fprintf(stderr, "inet_aton: invalid address (%s)\n", ip);
 		return EXIT_FAILURE;
 	}
 
