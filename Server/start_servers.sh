@@ -10,13 +10,17 @@ LOG_DIR=./logs
 
 function cleanup( )
 {
-	kill $(jobs -p)
+	local jobs=$(jobs -p)
+	if [ "$jobs" != "" ]
+	then
+		kill $jobs
+	fi
 }
 
 trap cleanup SIGINT SIGTERM EXIT
 
-mkdir $LOG_DIR
-mkdir $CAPTURE_DIR
+mkdir -p $LOG_DIR
+mkdir -p $CAPTURE_DIR
 
 echo "Configuring interfaces"
 for ip in ${IPS[@]};

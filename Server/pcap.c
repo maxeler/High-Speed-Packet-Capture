@@ -8,7 +8,6 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <string.h>
-#include <math.h>
 
 #include "pcap.h"
 
@@ -64,14 +63,7 @@ static int frameh_write( packeth_t* header, FILE* file )
 
 static int frame_data_write( const uint64_t* data, ssize_t size, FILE* file )
 {
-	printf("SIZE: %ldB\n", size);
-	int words = ceil(size/8.0);
-	for( int i=0; i<words; i++ )
-	{
-		printf("DATA[%2d]: 0x%016"PRIx64"\n", i, data[i]);
-	}
 	fwrite(data, size, 1, file);
-
 	return 0;
 }
 

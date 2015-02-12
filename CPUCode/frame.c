@@ -6,7 +6,7 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <stdlib.h>
-#include "frame_part.h"
+#include "frame.h"
 
 struct frame_part_s
 {
@@ -16,7 +16,7 @@ struct frame_part_s
 	uint64_t data;
 };
 
-frame_part_t* frame_part_init( int sof, int eof, int mod, uint64_t* data )
+frame_part_t* frame_init( int sof, int eof, int mod, uint64_t* data )
 {
 	assert(data != NULL);
 
@@ -31,7 +31,7 @@ frame_part_t* frame_part_init( int sof, int eof, int mod, uint64_t* data )
 	return part;
 }
 
-frame_part_t* frame_part_parse( uint64_t raw[2] )
+frame_part_t* frame_parse( uint64_t raw[2] )
 {
 	assert(&raw != NULL);
 
@@ -40,25 +40,25 @@ frame_part_t* frame_part_parse( uint64_t raw[2] )
 	int sof = (raw[1] >> 1) & 0x1;
 	int mod = (raw[1] >> 2) & 0x7;
 
-	return frame_part_init(sof, eof, mod, data);
+	return frame_init(sof, eof, mod, data);
 }
 
-int frame_part_get_sof( frame_part_t* part )
+int frame_get_sof( frame_part_t* part )
 {
 	return part->sof;
 }
 
-int frame_part_get_eof( frame_part_t* part )
+int frame_get_eof( frame_part_t* part )
 {
 	return part->eof;
 }
 
-int frame_part_get_mod( frame_part_t* part )
+int frame_get_mod( frame_part_t* part )
 {
 	return part->mod;
 }
 
-ssize_t frame_part_get_size( frame_part_t* part )
+ssize_t frame_get_size( frame_part_t* part )
 {
 	ssize_t data_size = sizeof(part->data);
 
@@ -75,12 +75,12 @@ ssize_t frame_part_get_size( frame_part_t* part )
 	return size;
 }
 
-const uint64_t* frame_part_get_data( frame_part_t* part )
+const uint64_t* frame_get_data( frame_part_t* part )
 {
 	return &(part->data);
 }
 
-void frame_part_free( frame_part_t* part )
+void frame_free( frame_part_t* part )
 {
 	assert(part != NULL);
 	free(part);

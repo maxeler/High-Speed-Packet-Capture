@@ -10,14 +10,62 @@
 
 #include "Maxfiles.h"
 #include "MaxSLiCInterface.h"
-#include "frame_part.h"
+#include "frame.h"
 #include "pcap.h"
-
 
 static int CHUNK_SIZE = 16;
 static int BURST_SIZE = 192;
 static int SERVER_PORT = 2511;
-static int SERVER_COUNT = 2;
+static max_net_connection_t DFE_CONNECTION = MAX_NET_CONNECTION_QSFP_TOP_10G_PORT2;
+static const char* DFE_IP = "5.5.5.1";
+static const char* DFE_NETMASK = "255.255.255.0";
+static const char* SERVER_IPS[] =
+{
+	"5.5.5.2",
+	"5.5.5.3",
+};
+static int SERVER_COUNT = sizeof(SERVER_IPS)/sizeof(*SERVER_IPS);
+
+static int g_log_level;
+static const char* g_log_ip;
+
+#define logf(level, format, ...) if( g_log_level >= level ) printf("%s: "format, g_log_ip, __VA_ARGS__)
+#define log(level, format) if( g_log_level >= level ) printf("%s: "format, g_log_ip)
+#define log_info(format) log(1, format)
+#define logf_info(format, ...) logf(1, format, __VA_ARGS__)
+#define log_debug(format) log(2, format)
+#define logf_debug(format, ...) logf(2, format, __VA_ARGS__)
+
+static void dfe_configure_interface( max_engine_t* engine, max_net_connection_t interface, const char* ip, const char* netmask );
+
+static void init_server_capture( max_engine_t * engine, max_net_connection_t dfe_connection, const char* dfe_ip, const char* dfe_netmask, const char* ips[], int ips_len );
+
+static void local_capture_loop( max_engine_t* engine );
+
+int main( int argc, char** argv )
+{
+	(void) argc;
+	(void) argv;
+
+	// TODO: parse args
+	g_log_ip = DFE_IP;
+	g_log_level = 1;
+
+	max_file_t *maxfile = PacketCapture_init();
+	max_engine_t * engine = max_load(maxfile, "*");
+
+	log_info("Initializing DFE.\n");
+	init_server_capture(engine, DFE_CONNECTION, DFE_IP, DFE_NETMASK, SERVER_IPS, SERVER_COUNT);
+
+	log_info("Starting capture.\n");
+	PacketCapture_capture_run(engine, NULL);
+
+	log_info("Servicing DFE.\n");
+	local_capture_loop(engine);
+
+	return EXIT_SUCCESS;
+}
+
 
 static void dfe_configure_interface( max_engine_t* engine, max_net_connection_t interface, const char* ip, const char* netmask )
 {
@@ -33,38 +81,15 @@ static void dfe_configure_interface( max_engine_t* engine, max_net_connection_t 
 	max_ip_config(engine, interface, &ip_addr, &netmask_addr);
 }
 
-int main( int argc, char** argv )
+static void init_server_capture( max_engine_t * engine, max_net_connection_t dfe_connection, const char* dfe_ip, const char* dfe_netmask, const char* ips[], int ips_len )
 {
-	(void) argc;
-	(void) argv;
-
-	max_file_t *maxfile = PacketCapture_init();
-	printf("maxload start\n");
-	max_engine_t * engine = max_load(maxfile, "*");
-	printf("maxload end\n");
-
-	int data_bursts = 1;
-	int data_size = data_bursts * BURST_SIZE;
-	uint64_t frames_len = data_size / CHUNK_SIZE;
-
-	FILE* file = fopen("./capture.pcap", "w+");
-	pcap_t* pcap = pcap_create(file, 0, 1, 0, 65535);
-	assert(pcap != NULL);
-
-	/* init dfe */
-	dfe_configure_interface(engine, MAX_NET_CONNECTION_QSFP_TOP_10G_PORT2, "5.5.5.1", "255.255.255.0");
-
-	/* init clients */
-	const char* server_addrs[] =
-	{
-		"5.5.5.2",
-		"5.5.5.3",
-	};
+	// init networking connection
+	dfe_configure_interface(engine, dfe_connection, dfe_ip, dfe_netmask);
 
 	// create sockets
-	max_tcp_socket_t* sockets[SERVER_COUNT];
-	uint8_t socket_nums[SERVER_COUNT];
-	for( int i=0; i<SERVER_COUNT; i++ )
+	max_tcp_socket_t* sockets[ips_len];
+	uint8_t socket_nums[ips_len];
+	for( int i=0; i<ips_len; i++ )
 	{
 		max_tcp_socket_t* sock = max_tcp_create_socket(engine, "serverStream");
 		uint8_t socket_num = max_tcp_get_socket_number(sock);
@@ -74,45 +99,53 @@ int main( int argc, char** argv )
 	}
 
 	// connect sockets
-	for( int i=0; i<SERVER_COUNT; i++ )
+	log_info("Connecting to servers...\n");
+	for( int i=0; i<ips_len; i++ )
 	{
-		const char* ip = server_addrs[i];
+		const char* ip = ips[i];
 		max_tcp_socket_t* sock = sockets[i];
 
 		struct in_addr ip_addr;
 		inet_aton(ip, &ip_addr);
 
-		printf("Connecting to server %s...\n", ip);
 		max_tcp_connect(sock, &ip_addr, SERVER_PORT);
 	}
 
 	// wait for sockets to connect
-	for( int i=0; i<SERVER_COUNT; i++ )
+	for( int i=0; i<ips_len; i++ )
 	{
-		const char* ip = server_addrs[i];
+		const char* ip = ips[i];
 		max_tcp_socket_t* sock = sockets[i];
 
-		printf("Waiting for socket (%s) state: MAX_TCP_STATE_ESTABLISHED\n", ip);
+		logf_info("Waiting on %s...\n", ip);
 		max_tcp_await_state(sock, MAX_TCP_STATE_ESTABLISHED, NULL);
 	}
 
+	// configure dfe with socket handles
 	PacketCapture_configServers_actions_t config_servers_action =
 	{
-		.param_sockets = socket_nums
+		.param_serverCount = ips_len,
+		.param_sockets = socket_nums,
 	};
 	PacketCapture_configServers_run(engine, &config_servers_action);
+}
 
-	/* init cpu */
-	PacketCapture_capture_run(engine, NULL);
+static void local_capture_loop( max_engine_t* engine )
+{
+	int data_bursts = 1;
+	int data_size = data_bursts * BURST_SIZE;
+	int frames_len = data_size / CHUNK_SIZE;
 
-	/* read */
-	pcap_frame_t* frame = NULL;
+	FILE* file = fopen("./capture.pcap", "w+");
+	pcap_t* pcap = pcap_create(file, 0, 1, 0, 65535);
+	assert(pcap != NULL);
+
+	pcap_packet_t* packet = NULL;
+	int sof_expected = 1;
+	size_t total_packets = 0;
 	while( 1 )
 	{
-		printf("Running read.\n");
-
-
-		printf("Reading %"PRIu64" frames (%dB)\n", frames_len, data_size);
+		logf_debug("Reading %d frames (%dB)\n", frames_len, data_size);
 		uint64_t* data = malloc(data_size);
 		PacketCapture_read_actions_t read_action =
 		{
@@ -120,66 +153,84 @@ int main( int argc, char** argv )
 			.outstream_toCpu = data,
 		};
 		PacketCapture_read_run(engine, &read_action);
-		printf("Done reading.\n");
 
-		int data_len = data_size / sizeof(*data);
-		printf("data_len: %d\n", data_len);
-		printf("data = 0x");
-		for( int i=0; i<data_len; i++ )
+		// debug print data
+		if( g_log_level >= 2 )
 		{
-			printf("%016"PRIx64, data[i]);
+			size_t data_len = data_size / sizeof(*data);
+			char str[BUFSIZ];
+			int str_len = 0;
+			str_len += snprintf((str + str_len), BUFSIZ, "read %ldB: ", data_len);
+			for( int i=0; (i * sizeof(*data))<data_len; i++ )
+			{
+				if( i != 0 )
+				{
+					str_len += snprintf((str + str_len), (BUFSIZ - str_len), ".");
+				}
+				str_len += snprintf((str + str_len), (BUFSIZ - str_len), "%016"PRIx64, data[i]);
+			}
+			snprintf((str + str_len), (BUFSIZ - str_len), "\n");
+			logf_debug("%s", str);
 		}
-		printf("\n");
 
 		for( int i=0; i<frames_len; i++ )
 		{
-			printf("[frame = %d]\n", i);
+			logf_debug("[frame = %d]\n", i);
 
 			int frame_index = (2 * i);
 			uint64_t* frame_data = &data[frame_index];
-			printf("data = 0x%016"PRIx64".%016"PRIx64"\n", frame_data[1], frame_data[0]);
-			printf("frame[%d][0]: 0x%"PRIx64"\n", i, frame_data[0]);
-			printf("frame[%d][1]: 0x%"PRIx64"\n", i, frame_data[1]);
+			logf_debug("data = 0x%016"PRIx64".%016"PRIx64"\n", frame_data[1], frame_data[0]);
+			logf_debug("frame[%d][0]: 0x%"PRIx64"\n", i, frame_data[0]);
+			logf_debug("frame[%d][1]: 0x%"PRIx64"\n", i, frame_data[1]);
 
 			// parse frame part
-			frame_part_t* part = frame_part_parse(frame_data);
+			frame_part_t* part = frame_parse(frame_data);
 			assert(part != NULL);
 
-			printf("part[%d].data: 0x%"PRIx64"\n", i, *frame_part_get_data(part));
-			printf("part[%d].eof: %d\n", i, frame_part_get_eof(part));
-			printf("part[%d].sof: %d\n", i, frame_part_get_sof(part));
-			printf("part[%d].size: %ldB\n", i, frame_part_get_size(part));
-			printf("\n");
+			logf_debug("frame[%d].data: 0x%"PRIx64"\n", i, *frame_get_data(part));
+			logf_debug("frame[%d].eof: %d\n", i, frame_get_eof(part));
+			logf_debug("frame[%d].sof: %d\n", i, frame_get_sof(part));
+			logf_debug("frame[%d].size: %ldB\n", i, frame_get_size(part));
+			log_debug("\n");
 
 			// init frame
-			int sof = frame_part_get_sof(part);
-			int eof = frame_part_get_eof(part);
+			int sof = frame_get_sof(part);
+			int eof = frame_get_eof(part);
+
+			assert(sof_expected == sof);
+
 			if( sof )
 			{
-				frame = pcap_frame_init(pcap, time(NULL), 0);
-				assert(frame != NULL);
+				packet = pcap_packet_init(pcap, time(NULL), 0);
+				assert(packet != NULL);
+
+				sof_expected = 0;
 			}
 
 			// build frame
-			const uint64_t* data = frame_part_get_data(part);
-			int size = frame_part_get_size(part);
-			pcap_frame_append(frame, data, size);
+			const uint64_t* data = frame_get_data(part);
+			int size = frame_get_size(part);
+			pcap_packet_append(packet, data, size);
 
 			// write frame
 			if( eof )
 			{
-				pcap_frame_write(pcap, frame);
+				pcap_packet_write(pcap, packet);
+				pcap_flush(pcap);
 
 				// free
-				pcap_frame_free(frame);
-				frame = NULL;
-				fflush(file);
+				pcap_packet_free(packet);
+				packet = NULL;
+
+				sof_expected = 1;
+				total_packets++;
+				logf_info("Total packet(s): %ld\n", total_packets);
 			}
 
-			frame_part_free(part);
+			frame_free(part);
 			part = NULL;
 		}
 	}
 
-	return EXIT_SUCCESS;
+	// TODO: cleanup
 }
