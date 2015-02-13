@@ -8,12 +8,7 @@ MASK=24
 CAPTURE_DIR=./captures
 LOG_DIR=./logs
 
-if [ "$NO_UNBUFFER" == "1" ]
-then
-	UNBUFFER=
-else
-	UNBUFFER=unbuffer
-fi
+: ${LOG_ENABLE:=1}
 
 function cleanup( )
 {
@@ -43,7 +38,12 @@ for ip in ${IPS[@]};
 do
 	echo "Creating server for $ip"
 	file="capture_$ip.pcap"
-	$UNBUFFER $SERVER $ip $PORT $CAPTURE_DIR/$file 2>&1 | tee $LOG_DIR/log_$ip&
+	if [ $LOG_ENABLE -eq 1 ]
+	then
+		unbuffer $SERVER $ip $PORT $CAPTURE_DIR/$file 2>&1 | tee $LOG_DIR/log_$ip&
+	else
+		$SERVER $ip $PORT $CAPTURE_DIR/$file&
+	fi
 done
 echo "(Press enter to exit)"
 read
