@@ -8,6 +8,8 @@ MASK=24
 CAPTURE_DIR=./captures
 LOG_DIR=./logs
 
+: ${UNBUFFER:=unbuffer}
+
 function cleanup( )
 {
 	local jobs=$(jobs -p)
@@ -36,7 +38,7 @@ for ip in ${IPS[@]};
 do
 	echo "Creating server for $ip"
 	file="capture_$ip.pcap"
-	unbuffer $SERVER $ip $PORT $CAPTURE_DIR/$file 2>&1 | tee $LOG_DIR/log_$ip&
+	$UNBUFFER $SERVER $ip $PORT $CAPTURE_DIR/$file 2>&1 | tee $LOG_DIR/log_$ip&
 done
 echo "(Press enter to exit)"
 read
