@@ -70,10 +70,10 @@ endif
 
 
 startsim:
-	'$(MAXCOMPILERDIR)/bin/maxcompilersim' -n SimplePacketCa -c ISCA -k -d 1   -e QSFP_TOP_10G_PORT1:172.0.0.2:255.255.255.0  -p QSFP_TOP_10G_PORT1:/local-scratch/mwilson/projects/PacketCaptureApp/SimplePacketCapture/RunRules/Simulation/capture.pcap   -e QSFP_TOP_10G_PORT2:5.5.5.0:255.255.255.0   restart
+	'$(MAXCOMPILERDIR)/bin/maxcompilersim' -n SimplePacketCa -c ISCA -k -d 1   -e QSFP_TOP_10G_PORT1:172.0.0.2:255.255.255.0    -e QSFP_TOP_10G_PORT2:5.5.5.0:255.255.255.0   restart
 
 stopsim:
-	'$(MAXCOMPILERDIR)/bin/maxcompilersim' -n SimplePacketCa -c ISCA -k -d 1   -e QSFP_TOP_10G_PORT1:172.0.0.2:255.255.255.0  -p QSFP_TOP_10G_PORT1:/local-scratch/mwilson/projects/PacketCaptureApp/SimplePacketCapture/RunRules/Simulation/capture.pcap   -e QSFP_TOP_10G_PORT2:5.5.5.0:255.255.255.0   stop
+	'$(MAXCOMPILERDIR)/bin/maxcompilersim' -n SimplePacketCa -c ISCA -k -d 1   -e QSFP_TOP_10G_PORT1:172.0.0.2:255.255.255.0    -e QSFP_TOP_10G_PORT2:5.5.5.0:255.255.255.0   stop
 
 clean: clean-dist clean-objects clean-installers
 distclean: clean clean-maxfiles

@@ -8,7 +8,12 @@ MASK=24
 CAPTURE_DIR=./captures
 LOG_DIR=./logs
 
-: ${UNBUFFER:=unbuffer}
+if [ "$NO_UNBUFFER" == "1" ]
+then
+	UNBUFFER=
+else
+	UNBUFFER=unbuffer
+fi
 
 function cleanup( )
 {
