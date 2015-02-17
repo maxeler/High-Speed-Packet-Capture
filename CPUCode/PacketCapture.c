@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <time.h>
+#include <sys/time.h>
 
 #include "Maxfiles.h"
 #include "MaxSLiCInterface.h"
@@ -92,6 +93,12 @@ static void dfe_configure_interface( max_engine_t* engine, max_net_connection_t 
 
 static void init_server_capture( max_engine_t * engine, max_net_connection_t dfe_connection, const char* dfe_ip, const char* dfe_netmask, const char* ips[], int ips_len )
 {
+	assert(engine != NULL);
+	assert(dfe_ip != NULL);
+	assert(dfe_netmask != NULL);
+	assert(ips != NULL);
+	assert(ips_len > 0);
+
 	// init networking connection
 	dfe_configure_interface(engine, dfe_connection, dfe_ip, dfe_netmask);
 
