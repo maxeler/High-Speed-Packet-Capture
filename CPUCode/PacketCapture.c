@@ -17,14 +17,7 @@ static int CHUNK_SIZE = 16;
 static int BURST_SIZE = 192;
 static int SERVER_PORT = 2511;
 static max_net_connection_t DFE_CONNECTION = MAX_NET_CONNECTION_QSFP_TOP_10G_PORT2;
-static const char* DFE_IP = "5.5.5.1";
-static const char* DFE_NETMASK = "255.255.255.0";
-static const char* SERVER_IPS[] =
-{
-	"5.5.5.2",
-	"5.5.5.3",
-};
-static int SERVER_COUNT = sizeof(SERVER_IPS)/sizeof(*SERVER_IPS);
+static int SERVERS_MAX = 2;
 
 static int g_log_level;
 static const char* g_log_ip;
@@ -44,18 +37,34 @@ static void local_capture_loop( max_engine_t* engine );
 
 int main( int argc, char** argv )
 {
-	(void) argc;
-	(void) argv;
+	// TODO: parse properly and validate ips
+	// TODO: parse log level
+	// TODO: add local and server capture modes
+	if( argc < 4 )
+	{
+		printf("%s: dfe-ip dfe-netmask server-ip0..server-ip%d\n", argv[0], (SERVERS_MAX - 1));
+		return EXIT_FAILURE;
+	}
 
-	// TODO: parse args
-	g_log_ip = DFE_IP;
+	const char* dfe_ip = argv[1];
+	const char* dfe_netmask = argv[2];
+
+	const char* server_ips[SERVERS_MAX];
+	int server_ips_len = 0;
+	for( int i=0; i<SERVERS_MAX && (i + 3)<argc; i++ )
+	{
+		server_ips[i] = argv[i + 3];
+		server_ips_len++;
+	}
+
+	g_log_ip = dfe_ip;
 	g_log_level = 1;
 
 	max_file_t *maxfile = PacketCapture_init();
 	max_engine_t * engine = max_load(maxfile, "*");
 
 	log_info("Initializing DFE.\n");
-	init_server_capture(engine, DFE_CONNECTION, DFE_IP, DFE_NETMASK, SERVER_IPS, SERVER_COUNT);
+	init_server_capture(engine, DFE_CONNECTION, dfe_ip, dfe_netmask, server_ips, server_ips_len);
 
 	log_info("Starting capture.\n");
 	PacketCapture_capture_run(engine, NULL);
