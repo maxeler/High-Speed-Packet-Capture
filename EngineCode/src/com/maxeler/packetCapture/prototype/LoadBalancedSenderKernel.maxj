@@ -16,8 +16,8 @@ import com.maxeler.networking.v1.kernel_types.TCPType;
 
 public class LoadBalancedSenderKernel extends Kernel
 {
-	static final DFEStructType META_TYPE = new DFEStructType(sft("sof", dfeBool()), sft("eof", dfeBool()), sft("mod", dfeUInt(3)));
-	static final int META_SIZE = (int) Math.ceil(META_TYPE.getTotalBits() / 8.0);
+	static final DFEStructType HEADER_TYPE = new DFEStructType(sft("sof", dfeBool()), sft("eof", dfeBool()), sft("mod", dfeUInt(3)));
+	static final int HEADER_SIZE = (int) Math.ceil(HEADER_TYPE.getTotalBits() / 8.0);
 
 	public LoadBalancedSenderKernel( KernelParameters parameters, final Types types, int serverCountMax )
 	{
@@ -36,6 +36,7 @@ public class LoadBalancedSenderKernel extends Kernel
 		Counter modeCounter = control.count.makeCounter(params);
 		DFEVar modeCount = modeCounter.getCount();
 
+		// input streams
 		DFEVar inputEnable = modeCount === 0;
 		DFEStruct datumPadded = io.input("datumPadded", types.datumPaddedType, inputEnable);
 		DFEVar sockets[] = new DFEVar[serverCountMax];
@@ -46,10 +47,17 @@ public class LoadBalancedSenderKernel extends Kernel
 			socket.simWatch("socket" + i);
 			sockets[i] = socket;
 		}
-		DFEVar serverSocket = control.mux(serverSelect, sockets);
 
+		DFEVar serverSocket = control.mux(serverSelect, sockets);
 		DFEStruct datum = datumPadded["datum"];
 
+		// create header
+		DFEStruct header = HEADER_TYPE.newInstance(this);
+		header["sof"] = datum[TCPType.SOF];
+		header["eof"] = datum[TCPType.EOF];
+		header["mod"] = datum[TCPType.MOD];
+
+		// sim watches
 		datum.simWatch("datum");
 		inputEnable.simWatch("inputEnable");
 		modeCount.simWatch("modeCount");
@@ -57,23 +65,19 @@ public class LoadBalancedSenderKernel extends Kernel
 		serverSelect.simWatch("serverSelect");
 		serverSocket.simWatch("serverSocket");
 
-
-		DFEStruct meta = META_TYPE.newInstance(this);
-		meta["sof"] = datum[TCPType.SOF];
-		meta["eof"] = datum[TCPType.EOF];
-		meta["mod"] = datum[TCPType.MOD];
-
 		packetCounterEnable <== ((DFEVar) datum[TCPType.EOF] === 1) & modeCounter.getWrap();
 
 		DFEStruct frame = new TCPType().getDFEStructType().newInstance(this);
 
-		DFEVar mod = modeCount === 0 ? (META_SIZE % 8) : (DFEVar) datum[TCPType.MOD];
+		DFEVar mod = modeCount === 0 ? (HEADER_SIZE % 8) : (DFEVar) datum[TCPType.MOD];
 
+		// select frame header or frame datum for emission
 		int frameDataBits = frame[TCPType.DATA].getType().getTotalBits();
 		DFEVar datumRaw = datum[TCPType.DATA].pack();
-		DFEVar metaRaw = dfeRawBits(frameDataBits - META_TYPE.getTotalBits()).newInstance(this, 0).cat(meta.pack());
+		DFEVar metaRaw = dfeRawBits(frameDataBits - HEADER_TYPE.getTotalBits()).newInstance(this, 0).cat(header.pack());
 		DFEVar outData = (modeCount === 0) ? metaRaw : datumRaw;
 
+		// emit
 		// TODO: pack data into maximum tcp payload size for efficient data transfer
 		frame[TCPType.SOF] <== constant.var(true);
 		frame[TCPType.EOF] <== constant.var(true);
