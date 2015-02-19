@@ -1,4 +1,4 @@
-package com.maxeler.packetCapture.prototype;
+package com.maxeler.packetCapture;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
@@ -7,6 +7,8 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
 import com.maxeler.networking.types.EthernetRXType;
+import com.maxeler.packetCapture.types.DFEPaddedStructType;
+import com.maxeler.packetCapture.types.FrameTypes;
 
 // packs as many rx frames into burst size and pad the remaining with EOF
 class CaptureKernel extends Kernel

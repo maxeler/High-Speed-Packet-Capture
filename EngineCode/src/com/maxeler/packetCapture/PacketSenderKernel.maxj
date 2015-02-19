@@ -1,4 +1,4 @@
-package com.maxeler.packetCapture.prototype;
+package com.maxeler.packetCapture;
 
 import static com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType.sft;
 
@@ -9,6 +9,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType;
 import com.maxeler.networking.v1.kernel_types.TCPType;
+import com.maxeler.packetCapture.types.FrameTypes;
 
 public class PacketSenderKernel extends Kernel
 {

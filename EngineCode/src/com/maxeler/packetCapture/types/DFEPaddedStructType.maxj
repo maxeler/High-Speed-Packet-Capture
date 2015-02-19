@@ -1,4 +1,4 @@
-package com.maxeler.packetCapture.prototype;
+package com.maxeler.packetCapture.types;
 
 import java.util.Arrays;
 

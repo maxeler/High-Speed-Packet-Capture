@@ -1,4 +1,4 @@
-package com.maxeler.packetCapture.prototype;
+package com.maxeler.packetCapture;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
@@ -19,6 +19,8 @@ import com.maxeler.networking.v1.managers.netlib.EthernetChecksumMode;
 import com.maxeler.networking.v1.managers.netlib.EthernetStream;
 import com.maxeler.networking.v1.managers.netlib.Max4NetworkConnection;
 import com.maxeler.networking.v1.managers.netlib.TCPStream;
+import com.maxeler.packetCapture.serverRouting.AdvancedRRKernel;
+import com.maxeler.packetCapture.types.FrameTypes;
 
 public class CaptureManager extends NetworkManager
 {
@@ -89,7 +91,7 @@ public class CaptureManager extends NetworkManager
 		// create kernels
 		KernelBlock captureK = addKernel(new CaptureKernel(makeKernelParameters("CaptureKernel"), types));
 		KernelBlock unpackerK = addKernel(new FramesUnpackerKernel(makeKernelParameters("DataUnpackerKernel"), types));
-		KernelBlock socketGenK = addKernel(new RoundRobinKernel(makeKernelParameters("RoundRobinKernel"), types, SERVER_COUNT_MAX));
+		KernelBlock socketGenK = addKernel(new AdvancedRRKernel(makeKernelParameters("RoundRobinKernel"), types, SERVER_COUNT_MAX));
 		KernelBlock senderK = addKernel(new PacketSenderKernel(makeKernelParameters("PacketSenderK"), types));
 
 		// connect

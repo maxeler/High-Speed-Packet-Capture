@@ -8,7 +8,7 @@
 <maxFiles>
 <maxFile buildName="PacketCapture" buildOrUseExisting="build">
 <runConfiguration askBeforeAutoBuild="false">
-<mainClass>com.maxeler.packetCapture.prototype.CaptureManager</mainClass>
+<mainClass>com.maxeler.packetCapture.CaptureManager</mainClass>
 <maxHeapSize>2</maxHeapSize>
 </runConfiguration>
 <selectEngineTarget enabled="false">VECTIS</selectEngineTarget>

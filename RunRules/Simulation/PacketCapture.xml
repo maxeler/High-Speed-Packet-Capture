@@ -22,7 +22,7 @@
                 <isset property="args"/>
             </not>
         </condition>
-        <java classname="com.maxeler.packetCapture.prototype.CaptureManager" fork="true" failonerror="false" resultproperty="java.result">
+        <java classname="com.maxeler.packetCapture.CaptureManager" fork="true" failonerror="false" resultproperty="java.result">
             <env key="MAXSOURCEDIRS" value="src"/>
             <jvmarg value="-Xmx2048m"/>
             <arg line="${args}"/>
@@ -57,7 +57,7 @@
         </copy>
         <jar destfile="CaptureManager.jar" basedir="../RunRules/Simulation/dist/jar">
             <manifest>
-                <attribute name="Main-Class" value="com.maxeler.packetCapture.prototype.CaptureManager"/>
+                <attribute name="Main-Class" value="com.maxeler.packetCapture.CaptureManager"/>
             </manifest>
         </jar>
     </target>

@@ -1,4 +1,4 @@
-package com.maxeler.packetCapture.prototype;
+package com.maxeler.packetCapture.types;
 
 import static com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType.sft;
 

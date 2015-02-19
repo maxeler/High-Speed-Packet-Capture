@@ -1,0 +1,48 @@
+package com.maxeler.packetCapture.serverRouting;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Params;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.maxcompiler.v2.utils.MathUtils;
+import com.maxeler.packetCapture.types.FrameTypes;
+
+public class AdvancedRRKernel extends Kernel
+{
+	DFEType SOCKET_TYPE = dfeUInt(8);
+
+	public AdvancedRRKernel( KernelParameters parameters, FrameTypes types, int socketLenMax )
+	{
+		super(parameters);
+		this.flush.disabled();
+
+		DFEStruct input = io.input("framePaddedIn", types.framePaddedType);
+
+		DFEType indexType = dfeUInt(MathUtils.bitsToAddress(socketLenMax));
+		DFEType socketLenType = dfeUInt(MathUtils.bitsToRepresent(socketLenMax));
+
+		DFEVar socketsLen = io.scalarInput("socketsLen", socketLenType);
+		DFEVar[] sockets = new DFEVar[socketLenMax];
+		for( int i=0; i<sockets.length; i++ )
+		{
+			String name = "socket" + i;
+			sockets[i] = io.scalarInput(name, SOCKET_TYPE);
+		}
+
+		Params params = control.count.makeParams(indexType.getTotalBits()).withMax(socketsLen);
+		Counter counter = control.count.makeCounter(params);
+		DFEVar index = counter.getCount();
+
+		DFEVar socket = control.mux(index, sockets);
+
+		socketsLen.simWatch("socketsLen");
+		index.simWatch("index");
+		socket.simWatch("socket");
+
+		io.output("socket", socket, socket.getType());
+		io.output("framePaddedOut", input, input.getType());
+	}
+}
