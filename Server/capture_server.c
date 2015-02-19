@@ -200,7 +200,7 @@ static int handle_client( pcap_t* pcap, int con_fd )
 				// parse
 				int sof = (buffer[0] >> 0) & 0x1;
 				int eof = (buffer[0] >> 1) & 0x1;
-				int mod = (buffer[0] >> 2) & 0x3;
+				int mod = (buffer[0] >> 2) & 0x7;
 				int size = (mod == 0) ? DATA_SIZE_MAX : mod;
 
 				// build frame
