@@ -9,20 +9,20 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 
-public class DataUnpackerKernel extends Kernel
+public class FramesUnpackerKernel extends Kernel
 {
 
-	protected DataUnpackerKernel( KernelParameters parameters, Types types )
+	protected FramesUnpackerKernel( KernelParameters parameters, FrameTypes types )
 	{
 		super(parameters);
 		flush.disabled();
 
-		NonBlockingInput<DFEStruct> dataInput = io.nonBlockingInput("packedData", types.dataPaddedType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
+		NonBlockingInput<DFEStruct> dataInput = io.nonBlockingInput("packedFrames", types.framesPaddedType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
 
-		DFEStruct packedData = dataInput.data;
-		DFEVector<DFEVar> data = packedData["data"];
+		DFEStruct packedFrames = dataInput.data;
+		DFEVector<DFEVar> frames = packedFrames["frames"];
 
-		io.output("data", data, types.dataType, dataInput.valid);
+		io.output("frames", frames, types.framesType, dataInput.valid);
 	}
 
 }

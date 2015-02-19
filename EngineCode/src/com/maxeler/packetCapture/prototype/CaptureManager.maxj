@@ -53,9 +53,12 @@ public class CaptureManager extends NetworkManager
 		super(params);
 		int writeBits = BURST_BITS * 2;
 		int dataLen = writeBits / 128;
-		Types types = new Types(128, dataLen, writeBits);
+		FrameTypes types = new FrameTypes(128, dataLen, writeBits);
 
-		// create ddr fifo
+		// create capture input
+		EthernetStream capturePort = addEthernetStream("dataIn", CAPTURE_PORT, EthernetChecksumMode.DropBadFrames);
+
+		// create lmem buffer
 		System.out.println("FIFO_DEPTH: " + FIFO_DEPTH);
 
 		StateMachineBlock wire = addStateMachine("cmdWire", new SimpleWire(this, 64));
@@ -77,33 +80,33 @@ public class CaptureManager extends NetworkManager
 		writeMemStream <== io.getOutput(DDRFifo.OUTPUT_MEM_DATA);
 		io.getInput(DDRFifo.INPUT_MEM_DATA) <== readMemStream;
 
-//		KernelBlock adapterK = addKernel(new AdapterKernel(makeKernelParameters("adapterKernel"), FRAME_CHUNK_BITS, FRAME_BITS));
-//		adapterK.getInput("input") <== addStreamFromCPU("captureIn");
-
-		KernelBlock captureK = addKernel(new CaptureKernel(makeKernelParameters("captureKernel"), types));
-
-		// create capture input
-		EthernetStream capturePort = addEthernetStream("dataIn", CAPTURE_PORT, EthernetChecksumMode.DropBadFrames);
-
-		// create data output
+		// create local stream
 		DFELink toCpu = addStreamToCPU("toCpu");
-		TCPStream serverStream = addTCPStream("serverStream", SERVER_PORT);
-		KernelBlock senderK = addKernel(new LoadBalancedSenderKernel(makeKernelParameters("SenderK"), types, SERVER_COUNT_MAX));
 
-		// attach
+		// create network stream
+		TCPStream serverStream = addTCPStream("serverStream", SERVER_PORT);
+
+		// create kernels
+		KernelBlock captureK = addKernel(new CaptureKernel(makeKernelParameters("CaptureKernel"), types));
+		KernelBlock unpackerK = addKernel(new FramesUnpackerKernel(makeKernelParameters("DataUnpackerKernel"), types));
+		KernelBlock socketGenK = addKernel(new RoundRobinKernel(makeKernelParameters("RoundRobinKernel"), types, SERVER_COUNT_MAX));
+		KernelBlock senderK = addKernel(new PacketSenderKernel(makeKernelParameters("PacketSenderK"), types));
+
+		// connect
 		captureK.getInput("input") <== capturePort.getReceiveStream();
-//		captureK.getInput("input") <== adapterK.getOutput("output");
-		io.getInput(DDRFifo.INPUT_DATA) <== captureK.getOutput("packedData");
+		io.getInput(DDRFifo.INPUT_DATA) <== captureK.getOutput("packedFrame");
 
 		Fanout dataFan = fanout("dataFan");
 		dataFan.getInput() <== io.getOutput(DDRFifo.OUTPUT_DATA);
 		toCpu <== dataFan.addOutput("cpu");
 
-		KernelBlock unpackerK = addKernel(new DataUnpackerKernel(makeKernelParameters("DataUnpackerKernel"), types));
-		unpackerK.getInput("packedData") <== dataFan.addOutput("kernel");
+		unpackerK.getInput("packedFrames") <== dataFan.addOutput("kernel");
+		socketGenK.getInput("framePaddedIn") <== unpackerK.getOutput("frames");
 
-		senderK.getInput("datumPadded") <== unpackerK.getOutput("data");
-		serverStream.getTransmitStream() <== senderK.getOutput("frame");
+		senderK.getInput("socket") <== socketGenK.getOutput("socket");
+		senderK.getInput("framePadded") <== socketGenK.getOutput("framePaddedOut");
+
+		serverStream.getTransmitStream() <== senderK.getOutput("data");
 
 	}
 
@@ -125,17 +128,17 @@ public class CaptureManager extends NetworkManager
 	{
 		EngineInterface ei = new EngineInterface("configServers");
 
-		InterfaceParam serverCount = ei.addParam("serverCount", CPUTypes.UINT8);
+		InterfaceParam socketsLen = ei.addParam("socketsLen", CPUTypes.UINT8);
 		InterfaceParamArray sockets = ei.addParamArray("sockets", CPUTypes.UINT8);
 		sockets.setMaxSize(serverCountMax);
 
-		ei.setScalar("SenderK", "serverCount", serverCount);
+		ei.setScalar("RoundRobinKernel", "socketsLen", socketsLen);
 
 		for( int i=0; i<serverCountMax; i++ )
 		{
 			InterfaceParam socket = sockets.get(i);
 			String name = "socket" + i;
-			ei.setScalar("SenderK", name, socket);
+			ei.setScalar("RoundRobinKernel", name, socket);
 		}
 
 		ei.ignoreAll(Direction.IN_OUT);

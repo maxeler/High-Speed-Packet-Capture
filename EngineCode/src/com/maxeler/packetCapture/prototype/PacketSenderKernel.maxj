@@ -1,0 +1,67 @@
+package com.maxeler.packetCapture.prototype;
+
+import static com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType.sft;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType;
+import com.maxeler.networking.v1.kernel_types.TCPType;
+
+public class PacketSenderKernel extends Kernel
+{
+	DFEType SOCKET_TYPE = dfeUInt(8);
+
+	static final DFEStructType HEADER_TYPE = new DFEStructType(sft("sof", dfeBool()), sft("eof", dfeBool()), sft("mod", dfeUInt(3)));
+	static final int HEADER_SIZE = (int) Math.ceil(HEADER_TYPE.getTotalBits() / 8.0);
+
+	public PacketSenderKernel( KernelParameters parameters, final FrameTypes types )
+	{
+		super(parameters);
+		flush.disabled();
+
+		System.out.println("HEADER_SIZE: " + HEADER_SIZE);
+
+		DFEVar sendHeader = control.count.simpleCounter(1) === 0;
+		DFEVar readNextFrame = sendHeader;
+
+		DFEStruct framePadded = io.input("framePadded", types.framePaddedType, readNextFrame);
+		DFEStruct frame = framePadded["frame"];
+		DFEVar readNextSocket = ((DFEVar) (frame[TCPType.SOF]) === 1) & sendHeader;
+		DFEVar socket = io.input("socket", SOCKET_TYPE, readNextSocket);
+
+		readNextSocket.simWatch("readNextSocket");
+		socket.simWatch("socket");
+		frame.simWatch("frame");
+		sendHeader.simWatch("sendHeader");
+
+
+		DFEStruct header = HEADER_TYPE.newInstance(this);
+		header[TCPType.SOF] = frame[TCPType.SOF];
+		header[TCPType.EOF] = frame[TCPType.EOF];
+		header[TCPType.MOD] = frame[TCPType.MOD];
+
+		DFEStruct data = new TCPType().getDFEStructType().newInstance(this);
+
+		DFEVar mod = sendHeader ? (HEADER_SIZE % 8) : (DFEVar) frame[TCPType.MOD];
+
+		int frameDataBits = data[TCPType.DATA].getType().getTotalBits();
+		DFEVar frameRaw = frame[TCPType.DATA].pack();
+		DFEVar headerRaw = dfeRawBits(frameDataBits - HEADER_TYPE.getTotalBits()).newInstance(this, 0).cat(header.pack());
+		DFEVar outData = sendHeader ? headerRaw : frameRaw;
+
+		// TODO: pack data into maximum tcp payload size for efficient data transfer
+		data[TCPType.SOF] <== constant.var(true);
+		data[TCPType.EOF] <== constant.var(true);
+		data[TCPType.MOD] <== mod;
+		data[TCPType.DATA] <== outData;
+		data[TCPType.SOCKET] <== socket;
+
+		outData.simWatch("outData");
+		data.simWatch("data");
+
+		io.output("data", data, data.getType());
+	}
+}

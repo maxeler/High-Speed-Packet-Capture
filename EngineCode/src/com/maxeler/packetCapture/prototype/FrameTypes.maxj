@@ -8,19 +8,19 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.networking.types.EthernetRXType;
 
-public class Types
+public class FrameTypes
 {
-	public final EthernetRXType datumType;
-	public final DFEType datumRawType;
-	public final DFEPaddedStructType datumPaddedType;
-	public final DFEType datumPaddedRawType;
-	public final DFEVectorType<DFEVar>dataType;
-	public final DFEPaddedStructType dataPaddedType;
+	public final EthernetRXType frameType;
+	public final DFEType frameRawType;
+	public final DFEPaddedStructType framePaddedType;
+	public final DFEType framePaddedRawType;
+	public final DFEVectorType<DFEVar>framesType;
+	public final DFEPaddedStructType framesPaddedType;
 
-	public Types( int datumPaddedBits, int dataLen, int dataPaddedBits )
+	public FrameTypes( int datumPaddedBits, int dataLen, int dataPaddedBits )
 	{
-		datumType = new com.maxeler.networking.types.EthernetRXType();
-		int datumBits = datumType.getTotalBits();
+		frameType = new com.maxeler.networking.types.EthernetRXType();
+		int datumBits = frameType.getTotalBits();
 		int datumPadBits = datumPaddedBits - datumBits;
 		int dataPadBits = dataPaddedBits - (datumPaddedBits * dataLen);
 
@@ -34,13 +34,13 @@ public class Types
 		report("datumBits = " + datumBits + "b");
 
 		// datum
-		datumRawType = DFETypeFactory.dfeRawBits(datumType.getTotalBits());
-		datumPaddedType = new DFEPaddedStructType(datumPadBits, sft("datum", datumType));
-		datumPaddedRawType = DFETypeFactory.dfeRawBits(datumPaddedType.getTotalBits());
+		frameRawType = DFETypeFactory.dfeRawBits(frameType.getTotalBits());
+		framePaddedType = new DFEPaddedStructType(datumPadBits, sft("frame", frameType));
+		framePaddedRawType = DFETypeFactory.dfeRawBits(framePaddedType.getTotalBits());
 
 		// data
-		dataType = new DFEVectorType<DFEVar>(datumPaddedRawType, dataLen);
-		dataPaddedType = new DFEPaddedStructType(dataPadBits, sft("data", dataType));
+		framesType = new DFEVectorType<DFEVar>(framePaddedRawType, dataLen);
+		framesPaddedType = new DFEPaddedStructType(dataPadBits, sft("frames", framesType));
 	}
 
 	private static void report( String msg )

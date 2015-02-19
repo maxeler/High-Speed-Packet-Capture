@@ -12,19 +12,19 @@ import com.maxeler.networking.types.EthernetRXType;
 class CaptureKernel extends Kernel
 {
 
-	CaptureKernel( KernelParameters parameters, Types types )
+	CaptureKernel( KernelParameters parameters, FrameTypes types )
 	{
 		super(parameters);
 		this.flush.disabled();
 
-		EthernetRXType frameChunkType = types.datumType;
-		DFEPaddedStructType frameChunkPaddedType = types.datumPaddedType;
-		DFEStruct frameChunkPadded = frameChunkPaddedType.newPaddedInstance(this);
+		EthernetRXType frameType = types.frameType;
+		DFEPaddedStructType framePaddedType = types.framePaddedType;
+		DFEStruct framePadded = framePaddedType.newPaddedInstance(this);
 
-		NonBlockingInput<DFEStruct> in = io.nonBlockingInput("input", frameChunkType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
+		NonBlockingInput<DFEStruct> in = io.nonBlockingInput("input", frameType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
 
-		frameChunkPadded.get("datum") <== in.data;
+		framePadded.get("frame") <== in.data;
 
-		io.output("packedData", frameChunkPadded, frameChunkPaddedType, in.valid);
+		io.output("packedFrame", framePadded, framePaddedType, in.valid);
 	}
 }
