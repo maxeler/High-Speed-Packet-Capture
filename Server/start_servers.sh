@@ -1,7 +1,7 @@
 #!/bin/bash -e
 SERVER=./capture_server
 IF=tap1
-IPS=(5.5.5.2 5.5.5.3)
+IPS=(5.5.5.2 5.5.5.3 5.5.5.4)
 PORT=2511
 MASK=24
 

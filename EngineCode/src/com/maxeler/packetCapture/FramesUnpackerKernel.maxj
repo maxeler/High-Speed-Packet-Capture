@@ -23,6 +23,9 @@ public class FramesUnpackerKernel extends Kernel
 		DFEStruct packedFrames = dataInput.data;
 		DFEVector<DFEVar> frames = packedFrames["frames"];
 
+		dataInput.valid.simWatch("valid");
+		packedFrames.simWatch("packedFrames");
+
 		io.output("frames", frames, types.framesType, dataInput.valid);
 	}
 

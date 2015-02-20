@@ -4,22 +4,18 @@ import com.maxeler.maxcompiler.v2.build.EngineParameters;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.Fanout;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
-import com.maxeler.maxcompiler.v2.managers.custom.blocks.StateMachineBlock;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
-import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MemoryControlGroup;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParamArray;
-import com.maxeler.networking.statemachines.superfifo.DDRFifo;
-import com.maxeler.networking.statemachines.superfifo.SimpleWire;
 import com.maxeler.networking.v1.managers.NetworkManager;
 import com.maxeler.networking.v1.managers.netlib.EthernetChecksumMode;
 import com.maxeler.networking.v1.managers.netlib.EthernetStream;
 import com.maxeler.networking.v1.managers.netlib.Max4NetworkConnection;
 import com.maxeler.networking.v1.managers.netlib.TCPStream;
-import com.maxeler.packetCapture.serverRouting.AdvancedRRKernel;
+import com.maxeler.packetCapture.senders.CustomRRSenderKernel;
 import com.maxeler.packetCapture.types.FrameTypes;
 
 public class CaptureManager extends NetworkManager
@@ -61,26 +57,26 @@ public class CaptureManager extends NetworkManager
 		EthernetStream capturePort = addEthernetStream("dataIn", CAPTURE_PORT, EthernetChecksumMode.DropBadFrames);
 
 		// create lmem buffer
-		System.out.println("FIFO_DEPTH: " + FIFO_DEPTH);
-
-		StateMachineBlock wire = addStateMachine("cmdWire", new SimpleWire(this, 64));
-
-		getManagerConfiguration().dram.setEnableFlagCommands(true);
-
-		MemoryControlGroup ctrlGroup = addMemoryControlGroup("ctrlGroup", wire.getOutput(SimpleWire.OUTPUT));
-		DFELink writeMemStream = addStreamToOnCardMemory("writeMemStream", ctrlGroup);
-		DFELink readMemStream = addStreamFromOnCardMemory("readMemStream", ctrlGroup);
-		ctrlGroup.finalise();
-
-		StateMachineBlock io = addStateMachine("ddrFifo", new DDRFifo(this, FIFO_START, FIFO_DEPTH,
-				ctrlGroup.getStreamIndexIdWithinGroup("writeMemStream"),
-				ctrlGroup.getStreamIndexIdWithinGroup("readMemStream"),
-				0, 1));
-
-		wire.getInput(SimpleWire.INPUT) <== io.getOutput(DDRFifo.OUTPUT_MEM_COMMAND);
-
-		writeMemStream <== io.getOutput(DDRFifo.OUTPUT_MEM_DATA);
-		io.getInput(DDRFifo.INPUT_MEM_DATA) <== readMemStream;
+//		System.out.println("FIFO_DEPTH: " + FIFO_DEPTH);
+//
+//		StateMachineBlock wire = addStateMachine("cmdWire", new SimpleWire(this, 64));
+//
+//		getManagerConfiguration().dram.setEnableFlagCommands(true);
+//
+//		MemoryControlGroup ctrlGroup = addMemoryControlGroup("ctrlGroup", wire.getOutput(SimpleWire.OUTPUT));
+//		DFELink writeMemStream = addStreamToOnCardMemory("writeMemStream", ctrlGroup);
+//		DFELink readMemStream = addStreamFromOnCardMemory("readMemStream", ctrlGroup);
+//		ctrlGroup.finalise();
+//
+//		StateMachineBlock io = addStateMachine("ddrFifo", new DDRFifo(this, FIFO_START, FIFO_DEPTH,
+//				ctrlGroup.getStreamIndexIdWithinGroup("writeMemStream"),
+//				ctrlGroup.getStreamIndexIdWithinGroup("readMemStream"),
+//				0, 1));
+//
+//		wire.getInput(SimpleWire.INPUT) <== io.getOutput(DDRFifo.OUTPUT_MEM_COMMAND);
+//
+//		writeMemStream <== io.getOutput(DDRFifo.OUTPUT_MEM_DATA);
+//		io.getInput(DDRFifo.INPUT_MEM_DATA) <== readMemStream;
 
 		// create local stream
 		DFELink toCpu = addStreamToCPU("toCpu");
@@ -91,22 +87,21 @@ public class CaptureManager extends NetworkManager
 		// create kernels
 		KernelBlock captureK = addKernel(new CaptureKernel(makeKernelParameters("CaptureKernel"), types));
 		KernelBlock unpackerK = addKernel(new FramesUnpackerKernel(makeKernelParameters("DataUnpackerKernel"), types));
-		KernelBlock socketGenK = addKernel(new AdvancedRRKernel(makeKernelParameters("RoundRobinKernel"), types, SERVER_COUNT_MAX));
-		KernelBlock senderK = addKernel(new PacketSenderKernel(makeKernelParameters("PacketSenderK"), types));
+		KernelBlock senderK = addKernel(new CustomRRSenderKernel(makeKernelParameters("SenderK"), types));
 
 		// connect
 		captureK.getInput("input") <== capturePort.getReceiveStream();
-		io.getInput(DDRFifo.INPUT_DATA) <== captureK.getOutput("packedFrame");
+//		io.getInput(DDRFifo.INPUT_DATA) <== captureK.getOutput("packedFrame");
+
 
 		Fanout dataFan = fanout("dataFan");
-		dataFan.getInput() <== io.getOutput(DDRFifo.OUTPUT_DATA);
+//		dataFan.getInput() <== io.getOutput(DDRFifo.OUTPUT_DATA);
+		dataFan.getInput() <== captureK.getOutput("packedFrame");
 		toCpu <== dataFan.addOutput("cpu");
 
 		unpackerK.getInput("packedFrames") <== dataFan.addOutput("kernel");
-		socketGenK.getInput("framePaddedIn") <== unpackerK.getOutput("frames");
 
-		senderK.getInput("socket") <== socketGenK.getOutput("socket");
-		senderK.getInput("framePadded") <== socketGenK.getOutput("framePaddedOut");
+		senderK.getInput("framePadded") <== unpackerK.getOutput("frames");
 
 		serverStream.getTransmitStream() <== senderK.getOutput("data");
 
@@ -120,6 +115,7 @@ public class CaptureManager extends NetworkManager
 //
 //		ei.setStream("captureIn", CPUTypes.UINT64, size);
 
+//		ei.setStream("ready", CPUTypes.UINT8, 16);
 		ei.route("dataFan -> cpu, dataFan -> kernel");
 		ei.ignoreAll(Direction.IN_OUT);
 
@@ -130,17 +126,28 @@ public class CaptureManager extends NetworkManager
 	{
 		EngineInterface ei = new EngineInterface("configServers");
 
-		InterfaceParam socketsLen = ei.addParam("socketsLen", CPUTypes.UINT8);
-		InterfaceParamArray sockets = ei.addParamArray("sockets", CPUTypes.UINT8);
-		sockets.setMaxSize(serverCountMax);
+		InterfaceParam socketsALen = ei.addParam("socketsALen", CPUTypes.UINT8);
+		InterfaceParamArray socketsA = ei.addParamArray("socketsA", CPUTypes.UINT8);
+		socketsA.setMaxSize(serverCountMax);
+		InterfaceParam socketsBLen = ei.addParam("socketsBLen", CPUTypes.UINT8);
+		InterfaceParamArray socketsB = ei.addParamArray("socketsB", CPUTypes.UINT8);
+		socketsB.setMaxSize(serverCountMax);
 
-		ei.setScalar("RoundRobinKernel", "socketsLen", socketsLen);
+		ei.setScalar("SenderK", "socketsALen", socketsALen);
+		ei.setScalar("SenderK", "socketsBLen", socketsBLen);
 
 		for( int i=0; i<serverCountMax; i++ )
 		{
-			InterfaceParam socket = sockets.get(i);
-			String name = "socket" + i;
-			ei.setScalar("RoundRobinKernel", name, socket);
+			InterfaceParam socket = socketsA.get(i);
+			String name = "socketA" + i;
+			ei.setScalar("SenderK", name, socket);
+		}
+
+		for( int i=0; i<serverCountMax; i++ )
+		{
+			InterfaceParam socket = socketsB.get(i);
+			String name = "socketB" + i;
+			ei.setScalar("SenderK", name, socket);
 		}
 
 		ei.ignoreAll(Direction.IN_OUT);

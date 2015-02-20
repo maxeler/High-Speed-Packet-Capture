@@ -27,6 +27,9 @@ class CaptureKernel extends Kernel
 
 		framePadded.get("frame") <== in.data;
 
+		in.valid.simWatch("valid");
+		in.data.simWatch("frame");
+
 		io.output("packedFrame", framePadded, framePaddedType, in.valid);
 	}
 }

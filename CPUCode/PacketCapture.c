@@ -18,7 +18,7 @@ static int CHUNK_SIZE = 16;
 static int BURST_SIZE = 192;
 static int SERVER_PORT = 2511;
 static max_net_connection_t DFE_CONNECTION = MAX_NET_CONNECTION_QSFP_TOP_10G_PORT2;
-static int SERVERS_MAX = 2;
+static int SERVERS_MAX = 3;
 
 static int g_log_level;
 static const char* g_log_ip;
@@ -35,6 +35,8 @@ static void dfe_configure_interface( max_engine_t* engine, max_net_connection_t 
 static void init_server_capture( max_engine_t * engine, max_net_connection_t dfe_connection, const char* dfe_ip, const char* dfe_netmask, const char* ips[], int ips_len );
 
 static void local_capture_loop( max_engine_t* engine );
+
+static void start_capture( max_engine_t* engine );
 
 int main( int argc, char** argv )
 {
@@ -68,7 +70,7 @@ int main( int argc, char** argv )
 	init_server_capture(engine, DFE_CONNECTION, dfe_ip, dfe_netmask, server_ips, server_ips_len);
 
 	log_info("Starting capture.\n");
-	PacketCapture_capture_run(engine, NULL);
+	start_capture(engine);
 
 	log_info("Servicing DFE.\n");
 	local_capture_loop(engine);
@@ -76,6 +78,11 @@ int main( int argc, char** argv )
 	return EXIT_SUCCESS;
 }
 
+static void start_capture( max_engine_t* engine )
+{
+	PacketCapture_capture_actions_t capture_actions = { };
+	PacketCapture_capture_run(engine, &capture_actions);
+}
 
 static void dfe_configure_interface( max_engine_t* engine, max_net_connection_t interface, const char* ip, const char* netmask )
 {
@@ -140,8 +147,10 @@ static void init_server_capture( max_engine_t * engine, max_net_connection_t dfe
 	// configure dfe with socket handles
 	PacketCapture_configServers_actions_t config_servers_action =
 	{
-		.param_socketsLen = ips_len,
-		.param_sockets = socket_nums,
+		.param_socketsALen = ips_len - 1,
+		.param_socketsA = socket_nums,
+		.param_socketsBLen = ips_len - 1,
+		.param_socketsB = socket_nums + 1,
 	};
 	PacketCapture_configServers_run(engine, &config_servers_action);
 }
