@@ -4,12 +4,16 @@ import com.maxeler.maxcompiler.v2.build.EngineParameters;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.Fanout;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.StateMachineBlock;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MemoryControlGroup;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParamArray;
+import com.maxeler.networking.statemachines.superfifo.DDRFifo;
+import com.maxeler.networking.statemachines.superfifo.SimpleWire;
 import com.maxeler.networking.v1.managers.NetworkManager;
 import com.maxeler.networking.v1.managers.netlib.EthernetChecksumMode;
 import com.maxeler.networking.v1.managers.netlib.EthernetStream;
@@ -57,26 +61,26 @@ public class CaptureManager extends NetworkManager
 		EthernetStream capturePort = addEthernetStream("dataIn", CAPTURE_PORT, EthernetChecksumMode.DropBadFrames);
 
 		// create lmem buffer
-//		System.out.println("FIFO_DEPTH: " + FIFO_DEPTH);
-//
-//		StateMachineBlock wire = addStateMachine("cmdWire", new SimpleWire(this, 64));
-//
-//		getManagerConfiguration().dram.setEnableFlagCommands(true);
-//
-//		MemoryControlGroup ctrlGroup = addMemoryControlGroup("ctrlGroup", wire.getOutput(SimpleWire.OUTPUT));
-//		DFELink writeMemStream = addStreamToOnCardMemory("writeMemStream", ctrlGroup);
-//		DFELink readMemStream = addStreamFromOnCardMemory("readMemStream", ctrlGroup);
-//		ctrlGroup.finalise();
-//
-//		StateMachineBlock io = addStateMachine("ddrFifo", new DDRFifo(this, FIFO_START, FIFO_DEPTH,
-//				ctrlGroup.getStreamIndexIdWithinGroup("writeMemStream"),
-//				ctrlGroup.getStreamIndexIdWithinGroup("readMemStream"),
-//				0, 1));
-//
-//		wire.getInput(SimpleWire.INPUT) <== io.getOutput(DDRFifo.OUTPUT_MEM_COMMAND);
-//
-//		writeMemStream <== io.getOutput(DDRFifo.OUTPUT_MEM_DATA);
-//		io.getInput(DDRFifo.INPUT_MEM_DATA) <== readMemStream;
+		System.out.println("FIFO_DEPTH: " + FIFO_DEPTH);
+
+		StateMachineBlock wire = addStateMachine("cmdWire", new SimpleWire(this, 64));
+
+		getManagerConfiguration().dram.setEnableFlagCommands(true);
+
+		MemoryControlGroup ctrlGroup = addMemoryControlGroup("ctrlGroup", wire.getOutput(SimpleWire.OUTPUT));
+		DFELink writeMemStream = addStreamToOnCardMemory("writeMemStream", ctrlGroup);
+		DFELink readMemStream = addStreamFromOnCardMemory("readMemStream", ctrlGroup);
+		ctrlGroup.finalise();
+
+		StateMachineBlock io = addStateMachine("ddrFifo", new DDRFifo(this, FIFO_START, FIFO_DEPTH,
+				ctrlGroup.getStreamIndexIdWithinGroup("writeMemStream"),
+				ctrlGroup.getStreamIndexIdWithinGroup("readMemStream"),
+				0, 1));
+
+		wire.getInput(SimpleWire.INPUT) <== io.getOutput(DDRFifo.OUTPUT_MEM_COMMAND);
+
+		writeMemStream <== io.getOutput(DDRFifo.OUTPUT_MEM_DATA);
+		io.getInput(DDRFifo.INPUT_MEM_DATA) <== readMemStream;
 
 		// create local stream
 		DFELink toCpu = addStreamToCPU("toCpu");
@@ -91,12 +95,11 @@ public class CaptureManager extends NetworkManager
 
 		// connect
 		captureK.getInput("input") <== capturePort.getReceiveStream();
-//		io.getInput(DDRFifo.INPUT_DATA) <== captureK.getOutput("packedFrame");
+		io.getInput(DDRFifo.INPUT_DATA) <== captureK.getOutput("packedFrame");
 
 
 		Fanout dataFan = fanout("dataFan");
-//		dataFan.getInput() <== io.getOutput(DDRFifo.OUTPUT_DATA);
-		dataFan.getInput() <== captureK.getOutput("packedFrame");
+		dataFan.getInput() <== io.getOutput(DDRFifo.OUTPUT_DATA);
 		toCpu <== dataFan.addOutput("cpu");
 
 		unpackerK.getInput("packedFrames") <== dataFan.addOutput("kernel");

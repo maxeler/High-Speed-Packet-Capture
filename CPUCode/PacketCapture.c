@@ -147,7 +147,7 @@ static void init_server_capture( max_engine_t * engine, max_net_connection_t dfe
 	// configure dfe with socket handles
 	PacketCapture_configServers_actions_t config_servers_action =
 	{
-		.param_socketsALen = ips_len - 1,
+		.param_socketsALen = 1,
 		.param_socketsA = socket_nums,
 		.param_socketsBLen = ips_len - 1,
 		.param_socketsB = socket_nums + 1,
