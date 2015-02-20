@@ -36,6 +36,7 @@ public abstract class PacketSenderKernel extends Kernel
 		DFEVar readNextSocket = ((DFEVar) (frame[TCPType.SOF]) === 1) & sendHeader & input.valid;
 		DFEVar socket = getFrameSocket(readNextSocket, frame);
 
+		input.valid.simWatch("valid");
 		readNextSocket.simWatch("readNextSocket");
 		socket.simWatch("socket");
 		frame.simWatch("frame");
