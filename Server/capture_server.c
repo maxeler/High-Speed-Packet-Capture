@@ -218,7 +218,7 @@ static int handle_client( pcap_t* pcap, int con_fd )
 				if( eof )
 				{
 					total_packets++;
-					logf_info("Total packet(s): %ld\n", total_packets);
+					logf_info("Total packets: %ld\n", total_packets);
 				}
 
 				break;

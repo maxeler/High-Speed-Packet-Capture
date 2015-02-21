@@ -249,7 +249,7 @@ static void local_capture_loop( max_engine_t* engine )
 
 				sof_expected = 1;
 				total_packets++;
-				logf_info("Total packet(s): %ld\n", total_packets);
+				logf_info("Total packets: %ld\n", total_packets);
 			}
 
 			frame_free(part);
