@@ -66,7 +66,7 @@ int main( int argc, char* argv[] )
 	const char* filePath = argv[3];
 
 	g_log_ip = ip;
-	g_log_level = 2;
+	g_log_level = 3;
 
 	// init pcap
 	FILE* file = fopen(filePath, "w+");
@@ -149,7 +149,6 @@ int main( int argc, char* argv[] )
 static int handle_client( pcap_t* pcap, int con_fd )
 {
 	int buffer_size = fmax(HEADER_SIZE, DATA_SIZE_MAX);
-	printf("buffer_size: %d\n", buffer_size);
 	uint64_t* buffer = malloc(buffer_size);
 
 	size_t total_packets = 0; // note: may overflow
