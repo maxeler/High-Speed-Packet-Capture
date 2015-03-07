@@ -19,30 +19,38 @@ import com.maxeler.networking.v1.managers.netlib.EthernetChecksumMode;
 import com.maxeler.networking.v1.managers.netlib.EthernetStream;
 import com.maxeler.networking.v1.managers.netlib.Max4NetworkConnection;
 import com.maxeler.networking.v1.managers.netlib.TCPStream;
+import com.maxeler.networking.v1.managers.netlib.TimestampFormat;
 import com.maxeler.packetCapture.senders.CustomRRSenderKernel;
-import com.maxeler.packetCapture.types.FrameTypes;
+import com.maxeler.packetCapture.types.Types;
+
+
 
 public class CaptureManager extends NetworkManager
 {
-	private static final int FRAME_BITS = 70;
-	private static final int FRAME_CHUNK_BITS = 128;
 	private static final int BURST_BITS = 192;
+	private static final int SERVER_COUNT_MAX = 2;
 	private static final long FIFO_START = 0;
 	private static final long FIFO_DEPTH = 16 * 1024 * 1024;
-	private static final int SERVER_COUNT_MAX = 2;
 
+	// TODO: write to maxfile constant
 	private static final Max4NetworkConnection CAPTURE_PORT = Max4NetworkConnection.QSFP_TOP_10G_PORT1;
 	private static final Max4NetworkConnection SERVER_PORT = Max4NetworkConnection.QSFP_TOP_10G_PORT2;
 
+	// TODO: write to maxfile constant
+	private static final int TIME_PRECISION = 8;
+
 	public static void main( String[] args )
 	{
+		int lmemWriteBits = BURST_BITS * 2;
+		int cpuWriteBits = 256;
+		Types types = new Types(lmemWriteBits, cpuWriteBits);
 
 		EngineParameters params = new EngineParameters(args);
-		CaptureManager manager = new CaptureManager(params);
+		CaptureManager manager = new CaptureManager(params, types);
 
 		manager.createSLiCinterface(createCaptureInterface());
 		manager.createSLiCinterface(createConfigServersInterface(SERVER_COUNT_MAX));
-		manager.createSLiCinterface(createReadInterface());
+		manager.createSLiCinterface(createLocalInterface(types));
 
 
 		manager.debug.setDebugLevel(new DebugLevel(){{this.setHasStreamStatus(true);}});
@@ -50,18 +58,14 @@ public class CaptureManager extends NetworkManager
 		manager.build();
 	}
 
-	public CaptureManager( EngineParameters params )
+	public CaptureManager( EngineParameters params, Types types )
 	{
 		super(params);
-		int writeBits = BURST_BITS * 2;
-		int dataLen = writeBits / 128;
-		FrameTypes types = new FrameTypes(128, dataLen, writeBits);
 
 		// create capture input
 		EthernetStream capturePort = addEthernetStream("dataIn", CAPTURE_PORT, EthernetChecksumMode.DropBadFrames);
 
 		// create lmem buffer
-		System.out.println("FIFO_DEPTH: " + FIFO_DEPTH);
 
 		StateMachineBlock wire = addStateMachine("cmdWire", new SimpleWire(this, 64));
 
@@ -88,25 +92,33 @@ public class CaptureManager extends NetworkManager
 		// create network stream
 		TCPStream serverStream = addTCPStream("serverStream", SERVER_PORT);
 
+		// create timestamp stream
+		DFELink timeStampStream = addTimestampStream("timestampStream", TimestampFormat.COUNT, TIME_PRECISION);
+
 		// create kernels
 		KernelBlock captureK = addKernel(new CaptureKernel(makeKernelParameters("CaptureKernel"), types));
-		KernelBlock unpackerK = addKernel(new FramesUnpackerKernel(makeKernelParameters("DataUnpackerKernel"), types));
+		KernelBlock packerK = addKernel(new PackerKernel(makeKernelParameters("CapturePackerKernel"), types));
+		KernelBlock unpackerK = addKernel(new UnpackerKernel(makeKernelParameters("CaptureUnpackerKernel"), types));
 		KernelBlock senderK = addKernel(new CustomRRSenderKernel(makeKernelParameters("SenderK"), types));
+		KernelBlock cpuFormatterK = addKernel(new CpuFormatterKernel(makeKernelParameters("CpuFormatterKernel"), types));
 
 		// connect
-		captureK.getInput("input") <== capturePort.getReceiveStream();
-		io.getInput(DDRFifo.INPUT_DATA) <== captureK.getOutput("packedFrame");
+		captureK.getInput("timestamp") <== timeStampStream;
+		captureK.getInput("frame") <== capturePort.getReceiveStream();
+		packerK.getInput("captureDatas") <== captureK.getOutput("captureData");
+		io.getInput(DDRFifo.INPUT_DATA) <== packerK.getOutput("captureDataPacked");
 
+		unpackerK.getInput("captureDataPacked") <== io.getOutput(DDRFifo.OUTPUT_DATA);
+//		unpackerK.getInput("captureDataPacked") <== packerK.getOutput("captureDataPacked");
 
-		Fanout dataFan = fanout("dataFan");
-		dataFan.getInput() <== io.getOutput(DDRFifo.OUTPUT_DATA);
-		toCpu <== dataFan.addOutput("cpu");
+		Fanout fan = fanout("fan");
+		fan.getInput() <== unpackerK.getOutput("captureDatas");
 
-		unpackerK.getInput("packedFrames") <== dataFan.addOutput("kernel");
+		senderK.getInput("captureData") <== fan.addOutput("server");
+		serverStream.getTransmitStream() <== senderK.getOutput("frame");
 
-		senderK.getInput("framePadded") <== unpackerK.getOutput("frames");
-
-		serverStream.getTransmitStream() <== senderK.getOutput("data");
+		cpuFormatterK.getInput("captureData") <== fan.addOutput("cpu");
+		toCpu <== cpuFormatterK.getOutput("cpuCaptureData");
 
 	}
 
@@ -114,12 +126,6 @@ public class CaptureManager extends NetworkManager
 	{
 		EngineInterface ei = new EngineInterface("capture");
 
-//		InterfaceParam size = ei.addParam("size", CPUTypes.UINT64);
-//
-//		ei.setStream("captureIn", CPUTypes.UINT64, size);
-
-//		ei.setStream("ready", CPUTypes.UINT8, 16);
-		ei.route("dataFan -> cpu, dataFan -> kernel");
 		ei.ignoreAll(Direction.IN_OUT);
 
 		return ei;
@@ -153,18 +159,21 @@ public class CaptureManager extends NetworkManager
 			ei.setScalar("SenderK", name, socket);
 		}
 
+		ei.route("fan -> server");
+
 		ei.ignoreAll(Direction.IN_OUT);
 		return ei;
 	}
 
-	public static EngineInterface createReadInterface( )
+	public static EngineInterface createLocalInterface( Types types )
 	{
-		EngineInterface ei = new EngineInterface("read");
+		EngineInterface ei = new EngineInterface("local");
 
-		InterfaceParam bursts = ei.addParam("bursts", CPUTypes.UINT64);
-		InterfaceParam size = (bursts * BURST_BITS);
+		InterfaceParam len = ei.addParam("len", CPUTypes.UINT64);
+		InterfaceParam size = len * (types.captureDataPaddedType.getTotalBits() / 8);
 
 		ei.setStream("toCpu", CPUTypes.UINT64, size);
+		ei.route("fan -> cpu");
 
 		ei.ignoreAll(Direction.IN_OUT);
 		return ei;

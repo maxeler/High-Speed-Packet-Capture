@@ -8,7 +8,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
 import com.maxeler.maxcompiler.v2.utils.Bits;
 import com.maxeler.maxcompiler.v2.utils.MathUtils;
 import com.maxeler.networking.v1.kernel_types.TCPType;
-import com.maxeler.packetCapture.types.FrameTypes;
+import com.maxeler.packetCapture.types.Types;
 
 /*
  * A sender kernel which classifies traffic into two types. The first type is ethernet frames with
@@ -19,7 +19,7 @@ public class CustomRRSenderKernel extends PacketSenderKernel
 {
 	private final int SOCKET_LEN_MAX = 2;
 
-	public CustomRRSenderKernel( KernelParameters parameters, FrameTypes types )
+	public CustomRRSenderKernel( KernelParameters parameters, Types types )
 	{
 		super(parameters, types);
 	}
@@ -71,15 +71,9 @@ public class CustomRRSenderKernel extends PacketSenderKernel
 		// therefore stream offsets are ok to use here on frame when packetEnable is true
 		// when packetEnable is true this is a start frame
 
-		DFEVar frameDatas[] = new DFEVar[3];
-		for( int i=0; i<frameDatas.length; i++ )
-		{
-			frameDatas[i] = (DFEVar) stream.offset(frame, i)[TCPType.DATA];
-		}
+		DFEStruct destFrame = stream.offset(frame, 1);
+		DFEVar dest = ((DFEVar) destFrame[TCPType.DATA]).slice(0, destType.getTotalBits());
 
-		DFEVar dest = frameDatas[1].slice(0, destType.getTotalBits());
-
-		frameDatas[1].simWatch("frameDatas_1");
 		dest.simWatch("dest");
 
 		DFEVar isTypeA = dest === destTarget;

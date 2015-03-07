@@ -2,12 +2,8 @@
 <projectDescription>
 	<name>PacketCaptureServer</name>
 	<comment></comment>
-	<manageMaxCompiler>false</manageMaxCompiler>
-	<manageMaxGenFD>false</manageMaxGenFD>
-	<manageMaxBlox>false</manageMaxBlox>
-	<maxelerVersion></maxelerVersion>
-	<maxelerBuildSystemVersion></maxelerBuildSystemVersion>
 	<projects>
+		<project>PacketCaptureCommon</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

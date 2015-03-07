@@ -1,5 +1,5 @@
 #
 # This file is managed by MaxIDE. Do NOT change.
 #
-HEADERS:= frame.h log.h pcap.h 
-SOURCES:= PacketCapture.c frame.c pcap.c 
+HEADERS:= capture_data.h libs.bak/frame.h libs.bak/log.h libs.bak/pcap.h libs.bak/timestamp.h 
+SOURCES:= PacketCapture.c capture_data.c libs.bak/frame.c libs.bak/pcap.c libs.bak/timestamp.c 

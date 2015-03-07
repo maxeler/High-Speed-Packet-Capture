@@ -8,25 +8,23 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
-import com.maxeler.packetCapture.types.FrameTypes;
+import com.maxeler.packetCapture.types.Types;
 
-public class FramesUnpackerKernel extends Kernel
+public class PackerKernel extends Kernel
 {
 
-	protected FramesUnpackerKernel( KernelParameters parameters, FrameTypes types )
+	// TODO: pack data from multiple ports
+	protected PackerKernel( KernelParameters parameters, Types types )
 	{
 		super(parameters);
 		flush.disabled();
 
-		NonBlockingInput<DFEStruct> dataInput = io.nonBlockingInput("packedFrames", types.framesPaddedType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
+		NonBlockingInput<DFEVector<DFEVar>> packedInput = io.nonBlockingInput("captureDatas", types.captureDatasType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
 
-		DFEStruct packedFrames = dataInput.data;
-		DFEVector<DFEVar> frames = packedFrames["frames"];
+		DFEStruct packed = types.captureDataPackedType.newPaddedInstance(this);
+		packed["captureDatas"] <== packedInput.data;
 
-		dataInput.valid.simWatch("valid");
-		packedFrames.simWatch("packedFrames");
-
-		io.output("frames", frames, types.framesType, dataInput.valid);
+		io.output("captureDataPacked", packed, packed.getType(), packedInput.valid);
 	}
 
 }

@@ -8,6 +8,9 @@ RUNRULE_DIR= ../RunRules/$(RUNRULE)
 include $(RUNRULE_DIR)/Makefile.settings
 include Makefile.files.include 
 
+LIB_COMMON := ../common/libcommon.a
+LIB_COMMON_DIR := $(dir $(LIB_COMMON))
+
 # The list of source files to compile may be overridden here.
 SRCS    := $(SOURCES)
 
@@ -38,9 +41,9 @@ else
  O_FLAGS = -g -O0
 endif
 
-CFLAGS    = -std=gnu99 $(O_FLAGS) -Wall -Wextra -I$(RUNRULE_DIR)/include $(shell slic-config --cflags) $(RUNRULE_CFLAGS)
+CFLAGS    = -std=gnu99 $(O_FLAGS) -Wall -Wextra -I$(RUNRULE_DIR)/include -I$(LIB_COMMON_DIR) $(shell slic-config --cflags) $(RUNRULE_CFLAGS)
 CXXFLAGS  = -Wall -Wextra $(O_FLAGS) -I$(RUNRULE_DIR)/include $(shell slic-config --cflags) $(RUNRULE_CFLAGS)
-LDFLAGS   = $(O_FLAGS) $(shell slic-config --libs) $(RUNRULE_LDFLAGS)
+LDFLAGS   = $(O_FLAGS) $(shell slic-config --libs) $(RUNRULE_LDFLAGS) -L$(LIB_COMMON_DIR) -lcommon
 
 #   Add other user-defined extensions here, e.g. --
 #CFLAGS    += -I/my/header/files

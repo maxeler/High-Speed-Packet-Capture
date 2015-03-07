@@ -1,0 +1,19 @@
+package com.maxeler.packetCapture.types;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFETypeFactory;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType;
+
+public class TimeStampFormat extends DFEStructType
+	{
+		public static final TimeStampFormat INSTANCE = new TimeStampFormat();
+		public static final String VALUE = "VALUE";
+		public static final String DOUBT = "DOUBT";
+		public static final String VALID = "VALID";
+
+		public TimeStampFormat( )
+		{
+			super(sft(VALUE, DFETypeFactory.dfeUInt(64)),
+				  sft(DOUBT, DFETypeFactory.dfeBool()),
+				  sft(VALID, DFETypeFactory.dfeBool()));
+		}
+	}
