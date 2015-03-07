@@ -15,7 +15,7 @@ typedef struct pcap_s pcap_t;
 
 pcap_t* pcap_create( FILE* file, int32_t  thiszone, uint32_t network, uint32_t sigfigs, uint32_t snaplen );
 
-pcap_packet_t* pcap_packet_init( pcap_t* pcap, uint32_t ts_sec, uint32_t ts_usec );
+pcap_packet_t* pcap_packet_init( pcap_t* pcap, uint32_t ts_sec, uint32_t ts_nsec );
 
 void pcap_packet_append( pcap_packet_t* packet, const uint64_t* data, uint32_t size );
 

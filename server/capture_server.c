@@ -17,14 +17,18 @@
 #include <assert.h>
 #include <time.h>
 #include <stdarg.h>
+#include <math.h>
 
 #include "pcap.h"
 #include "log.h"
+#include "capture_data.h"
 
-const int NUM_CONECTIONS = 1;
-const int HEADER_SIZE = 1;
-const int DATA_SIZE_MAX = 8;
-const int READ_SIZE_MAX = 8;
+
+static const int NUM_CONECTIONS = 1;
+static const int HEADER_SIZE = 1;
+static const int DATA_TIMESTAMP_SIZE = 8;
+static const int DATA_FRAME_SIZE_MAX = 8;
+#define DATA_SIZE_MAX (DATA_TIMESTAMP_SIZE + DATA_FRAME_SIZE_MAX)
 
 static void report_errno( const char* msg, int errnum )
 {
@@ -37,15 +41,11 @@ enum read_mode_e
 	READ_MODE_DATA,
 };
 
-typedef struct
-{
-	uint64_t* data;
-	ssize_t size;
-	int sof;
-	int eof;
-} frame_t;
+void parse_header( capture_data_t* data, uint64_t buffer[1] );
 
-void process_frame( pcap_t* pcap, frame_t* frame );
+void parse_data( capture_data_t* data, uint64_t buffer[1] );
+
+void process_capture_data( pcap_t* pcap, capture_data_t* data );
 
 static int handle_client( pcap_t* pcap, int conh );
 
@@ -66,7 +66,7 @@ int main( int argc, char* argv[] )
 	const char* filePath = argv[3];
 
 	g_log_ip = ip;
-	g_log_level = 1;
+	g_log_level = 2;
 
 	// init pcap
 	FILE* file = fopen(filePath, "w+");
@@ -148,19 +148,26 @@ int main( int argc, char* argv[] )
 
 static int handle_client( pcap_t* pcap, int con_fd )
 {
-	uint64_t* buffer = malloc(READ_SIZE_MAX);
-	memset(buffer, 0, READ_SIZE_MAX);
+	int buffer_size = fmax(HEADER_SIZE, DATA_SIZE_MAX);
+	printf("buffer_size: %d\n", buffer_size);
+	uint64_t* buffer = malloc(buffer_size);
 
 	size_t total_packets = 0; // note: may overflow
 	size_t read_size = HEADER_SIZE;
 	enum read_mode_e read_mode = READ_MODE_HEADER;
 	frame_t frame;
+	timestamp_t timestamp;
+	capture_data_t capture_data = {
+		.frame = &frame,
+		.timestamp = &timestamp,
+	};
 
 	// TODO: keep alive
 
 	while( 1 )
 	{
 		// read until expected bytes received
+		memset(buffer, 0, buffer_size);
 		ssize_t nbytes = 0;
 		while( nbytes < read_size )
 		{
@@ -197,25 +204,18 @@ static int handle_client( pcap_t* pcap, int con_fd )
 		{
 			case READ_MODE_HEADER:
 			{
-				// parse
-				int sof = (buffer[0] >> 0) & 0x1;
-				int eof = (buffer[0] >> 1) & 0x1;
-				int mod = (buffer[0] >> 2) & 0x7;
-				int size = (mod == 0) ? DATA_SIZE_MAX : mod;
+				// clear
+				*(capture_data.timestamp) = TIMESTAMP_EMPTY;
+				*(capture_data.frame) = FRAME_EMPTY;
 
-				// build frame
-				frame.eof = eof;
-				frame.sof = sof;
-				frame.size = size;
-
-				logf_debug("header (sof=%d, eof=%d, mod=%d)\n", sof, eof, mod);
+				parse_header(&capture_data, buffer);
 
 				// config next mode
 				read_mode = READ_MODE_DATA;
-				read_size = size;
+				read_size = DATA_TIMESTAMP_SIZE + frame_get_size(capture_data.frame);
 
 				// packet count
-				if( eof )
+				if( frame.eof )
 				{
 					total_packets++;
 					logf_info("Total packets: %ld\n", total_packets);
@@ -225,48 +225,82 @@ static int handle_client( pcap_t* pcap, int con_fd )
 			}
 			case READ_MODE_DATA:
 			{
-				logf_debug("data (%ldB)\n", frame.size);
-
-				// build frame
-				frame.data = buffer;
-
-				// process frame
-				process_frame(pcap, &frame);
+				parse_data(&capture_data, buffer);
+				process_capture_data(pcap, &capture_data);
 
 				// config next mode
 				read_mode = READ_MODE_HEADER;
 				read_size = HEADER_SIZE;
-				memset(&frame, 0, sizeof(frame));
 
 				break;
 			}
 		}
-		memset(buffer, 0, (READ_SIZE_MAX * sizeof(*buffer)));
 	}
 
 	return 0;
 }
 
-void process_frame( pcap_t* pcap, frame_t* frame )
+void parse_header( capture_data_t* data, uint64_t buffer[1] )
+{
+	assert(data != NULL);
+	assert(buffer != NULL);
+
+	timestamp_t* timestamp = data->timestamp;
+	frame_t* frame = data->frame;
+
+	timestamp->doubt = (buffer[0] >> 0) & 0x1;
+	timestamp->valid = (buffer[0] >> 1) & 0x1;
+	frame->sof = (buffer[0] >> 2) & 0x1;
+	frame->eof = (buffer[0] >> 3) & 0x1;
+	frame->mod = (buffer[0] >> 4) & 0x7;
+
+	logf_debug("header (timestamp(doubt=%d, valid=%d), frame(sof=%d, eof=%d, mod=%d))\n",
+			    timestamp->doubt,
+			    timestamp->valid,
+				frame->sof,
+				frame->eof,
+				frame->mod);
+}
+
+void parse_data( capture_data_t* data, uint64_t buffer[1] )
+{
+	assert(data != NULL);
+	assert(buffer != NULL);
+
+	timestamp_t* timestamp = data->timestamp;
+	frame_t* frame = data->frame;
+
+	timestamp->value = buffer[0];
+	frame->data = buffer[1];
+
+	logf_debug("data (timestamp(value=%"PRIu64", frame(data=0x%"PRIx64"))\n",
+				timestamp->value,
+				frame->data);
+}
+
+void process_capture_data( pcap_t* pcap, capture_data_t* data )
 {
 	assert(pcap != NULL);
-	assert(frame != NULL);
+	assert(data != NULL);
 
 	static pcap_packet_t* packet = NULL;
 	static int sof_expected = 1;
+
+	frame_t* frame = data->frame;
+	timestamp_t* timestamp = data->timestamp;
 
 	// sof
 	assert(sof_expected == frame->sof);
 	if( frame->sof )
 	{
-		packet = pcap_packet_init(pcap, time(NULL), 0);
+		packet = pcap_packet_init(pcap, timestamp_get_seconds(timestamp), timestamp_get_nanoseconds(timestamp));
 		assert(packet != NULL);
 
 		sof_expected = 0;
 	}
 
 	// append
-	pcap_packet_append(packet, frame->data, frame->size);
+	pcap_packet_append(packet, frame_get_data(frame), frame_get_size(frame));
 
 	// eof
 	if( frame->eof )

@@ -7,29 +7,30 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
 import com.maxeler.networking.types.EthernetRXType;
-import com.maxeler.packetCapture.types.DFEPaddedStructType;
-import com.maxeler.packetCapture.types.FrameTypes;
+import com.maxeler.packetCapture.types.CaptureDataType;
+import com.maxeler.packetCapture.types.TimeStampFormat;
+import com.maxeler.packetCapture.types.Types;
 
-// packs as many rx frames into burst size and pad the remaining with EOF
 class CaptureKernel extends Kernel
 {
-
-	CaptureKernel( KernelParameters parameters, FrameTypes types )
+	CaptureKernel( KernelParameters parameters, Types types )
 	{
 		super(parameters);
 		this.flush.disabled();
 
-		EthernetRXType frameType = types.frameType;
-		DFEPaddedStructType framePaddedType = types.framePaddedType;
-		DFEStruct framePadded = framePaddedType.newPaddedInstance(this);
+		EthernetRXType frameType = new EthernetRXType();
+		DFEStruct captureData = types.captureDataType.newInstance(this);
 
-		NonBlockingInput<DFEStruct> in = io.nonBlockingInput("input", frameType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
+		NonBlockingInput<DFEStruct> frameInput = io.nonBlockingInput("frame", frameType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
+		DFEStruct timestamp = io.input("timestamp", TimeStampFormat.INSTANCE);
 
-		framePadded.get("frame") <== in.data;
+		frameInput.valid.simWatch("valid");
+		frameInput.data.simWatch("frame");
+		timestamp.simWatch("timestamp");
 
-		in.valid.simWatch("valid");
-		in.data.simWatch("frame");
+		captureData[CaptureDataType.FRAME] <== frameInput.data;
+		captureData[CaptureDataType.TIMESTAMP] <== timestamp;
 
-		io.output("packedFrame", framePadded, framePaddedType, in.valid);
+		io.output("captureData", captureData, captureData.getType(), frameInput.valid);
 	}
 }

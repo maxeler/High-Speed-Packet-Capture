@@ -19,7 +19,7 @@ static const uint32_t MAGIC_NUMBER = 0xa1b23c4d;
 typedef struct __attribute__((__packed__)) packeth_s
 {
     uint32_t ts_sec;         /* timestamp seconds */
-    uint32_t ts_usec;        /* timestamp microseconds */
+    uint32_t ts_nsec;        /* timestamp nanoseconds */
     uint32_t incl_len;       /* number of octets of packet saved in file */
     uint32_t orig_len;       /* actual length of packet */
 } packeth_t;
@@ -109,22 +109,23 @@ pcap_t* pcap_create( FILE* file, int32_t  thiszone, uint32_t network, uint32_t s
 	return pcap;
 }
 
-pcap_packet_t* pcap_packet_init( pcap_t* pcap, uint32_t ts_sec, uint32_t ts_usec )
+pcap_packet_t* pcap_packet_init( pcap_t* pcap, uint32_t ts_sec, uint32_t ts_nsec )
 {
 	packeth_t* header = malloc(sizeof(*header));
 	assert(header != NULL);
 
 	header->ts_sec = ts_sec;
-	header->ts_usec = ts_usec;
+	header->ts_nsec = ts_nsec;
 	header->orig_len = 0;
 	header->incl_len = 0;
 
 	pcap_packet_t* packet = malloc(sizeof(*packet));
+	assert(packet != NULL);
 	packet->header = header;
 	packet->max_len = pcap->header->snaplen;
 	packet->data = malloc(packet->max_len);
-	packet->finalized = 0;
 	assert(packet->data != NULL);
+	packet->finalized = 0;
 
 	return packet;
 }

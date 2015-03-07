@@ -4,7 +4,7 @@
 
 MAXCOMPILER_QUOTE   := $(shell printf %q "$(MAXCOMPILERDIR)")
 
-RUNRULE_ARGS        := 5.5.5.1 255.255.255.0 5.5.5.2 5.5.5.3 5.5.5.4
+RUNRULE_ARGS        := 5.5.5.2 255.255.255.0 5.5.5.3 5.5.5.4 5.5.5.5
 RUNRULE_RUNENV      := MAXELEROSDIR="$(MAXCOMPILERDIR)/lib/maxeleros-sim" LD_LIBRARY_PATH="$(MAXCOMPILERDIR)/lib/maxeleros-sim/lib:$$LD_LIBRARY_PATH" SLIC_CONF="use_simulation=SimplePacketCa;"  
 RUNRULE_MAXFILES    := PacketCapture.max  
 RUNRULE_MAXFILES_H  := PacketCapture.h 
