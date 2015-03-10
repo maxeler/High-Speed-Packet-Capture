@@ -57,7 +57,7 @@ int main( int argc, char* argv[] )
 	// TODO: parse safely/properly
 	if( argc != 4 )
 	{
-		fprintf(stderr, "%s: ip port file.pcap", argv[0]);
+		fprintf(stderr, "%s: ip port file.pcap\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
