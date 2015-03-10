@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="SimplePacketCapture_EngineCode_run_script" default="all" basedir="../../EngineCode">
+<project name="PacketCaptureClient_EngineCode_run_script" default="all" basedir="../../EngineCode">
     <property environment="env"/>
     <condition property="maxcompilerdirpath" value="${env.MAXCOMPILERJCP}">
         <isset property="env.MAXCOMPILERJCP"/>
@@ -22,7 +22,7 @@
                 <isset property="args"/>
             </not>
         </condition>
-        <java classname="com.maxeler.packetCapture.prototype.CaptureManager" fork="true" failonerror="false" resultproperty="java.result">
+        <java classname="com.maxeler.packetCapture.CaptureManager" fork="true" failonerror="false" resultproperty="java.result">
             <env key="MAXSOURCEDIRS" value="src"/>
             <jvmarg value="-Xmx2048m"/>
             <arg line="${args}"/>
@@ -57,7 +57,7 @@
         </copy>
         <jar destfile="CaptureManager.jar" basedir="../RunRules/DFE/dist/jar">
             <manifest>
-                <attribute name="Main-Class" value="com.maxeler.packetCapture.prototype.CaptureManager"/>
+                <attribute name="Main-Class" value="com.maxeler.packetCapture.CaptureManager"/>
             </manifest>
         </jar>
     </target>

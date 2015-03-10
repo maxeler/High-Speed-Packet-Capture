@@ -1,16 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="SimplePacketCapture_EngineCode_build_script" default="all" basedir="../../EngineCode">
+<project name="PacketCaptureClient_EngineCode_build_script" default="all" basedir="../../EngineCode">
     <property environment="env"/>
-
-    <condition property="maxcompilerdirpath" value="${env.MAXCOMPILERJCP}">
-        <isset property="env.MAXCOMPILERJCP"/>
-    </condition>
-    <condition property="maxcompilerdirpath" value="${env.MAXCOMPILERDIR}/lib/MaxCompiler.jar">
-        <not>
-            <isset property="maxcompilerdirpath"/>
-        </not>
-    </condition>
-
     <taskdef name="maxjcompiler" classname="org.eclipse.jdt.core.ant.taskdef.MaxjTask" classpath="${env.MAXCOMPILERDIR}/lib/MaxIDE/ecj.jar" onerror="ignore"/>
     <condition property="maxcompilerdirpath" value="${env.MAXCOMPILERJCP}">
         <isset property="env.MAXCOMPILERJCP"/>
