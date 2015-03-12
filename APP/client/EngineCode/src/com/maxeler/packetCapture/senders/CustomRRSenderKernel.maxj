@@ -10,10 +10,10 @@ import com.maxeler.maxcompiler.v2.utils.MathUtils;
 import com.maxeler.networking.v1.kernel_types.TCPType;
 import com.maxeler.packetCapture.types.Types;
 
-/*
+/**
  * A sender kernel which classifies traffic into two types. The first type is ethernet frames with
  * a broadcast destination address. The second type is all other traffic. Each type of traffic is
- * sent in a round robin fashion to their own groups of servers.
+ * sent in a round robin fashion to their respective server pool.
  */
 public class CustomRRSenderKernel extends PacketSenderKernel
 {

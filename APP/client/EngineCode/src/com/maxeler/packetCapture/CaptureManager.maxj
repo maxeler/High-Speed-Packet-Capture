@@ -20,9 +20,9 @@ import com.maxeler.networking.v1.managers.netlib.EthernetStream;
 import com.maxeler.networking.v1.managers.netlib.Max4NetworkConnection;
 import com.maxeler.networking.v1.managers.netlib.TCPStream;
 import com.maxeler.networking.v1.managers.netlib.TimestampFormat;
+import com.maxeler.networking.v1.managers.netlib.TimestampSource;
 import com.maxeler.packetCapture.senders.CustomRRSenderKernel;
 import com.maxeler.packetCapture.types.Types;
-
 
 
 public class CaptureManager extends NetworkManager
@@ -41,8 +41,13 @@ public class CaptureManager extends NetworkManager
 
 	public static void main( String[] args )
 	{
+		// "word size" which capture data will be padded up to when written to lmem.
+		// note: must be a multiple of memory controller burst size
 		int lmemWriteBits = BURST_BITS * 2;
+		// "word size" which capture data will be padded up to when transfered from DFE to CPU
+		// note: convenient if multiple of a byte
 		int cpuWriteBits = 256;
+		// various types of the capture data
 		Types types = new Types(lmemWriteBits, cpuWriteBits);
 
 		EngineParameters params = new EngineParameters(args);
@@ -51,7 +56,6 @@ public class CaptureManager extends NetworkManager
 		manager.createSLiCinterface(createCaptureInterface());
 		manager.createSLiCinterface(createConfigServersInterface(SERVER_COUNT_MAX));
 		manager.createSLiCinterface(createLocalInterface(types));
-
 
 		manager.debug.setDebugLevel(new DebugLevel(){{this.setHasStreamStatus(true);}});
 
@@ -66,7 +70,6 @@ public class CaptureManager extends NetworkManager
 		EthernetStream capturePort = addEthernetStream("dataIn", CAPTURE_PORT, EthernetChecksumMode.DropBadFrames);
 
 		// create lmem buffer
-
 		StateMachineBlock wire = addStateMachine("cmdWire", new SimpleWire(this, 64));
 
 		getManagerConfiguration().dram.setEnableFlagCommands(true);
@@ -92,8 +95,10 @@ public class CaptureManager extends NetworkManager
 		// create network stream
 		TCPStream serverStream = addTCPStream("serverStream", SERVER_PORT);
 
-		// create timestamp stream
+		// create time stamp stream
+		this.pushTimestampSource(TimestampSource.HOST_CLOCK);
 		DFELink timeStampStream = addTimestampStream("timestampStream", TimestampFormat.COUNT, TIME_PRECISION);
+		this.popTimestampSource();
 
 		// create kernels
 		KernelBlock captureK = addKernel(new CaptureKernel(makeKernelParameters("CaptureKernel"), types));
@@ -109,7 +114,6 @@ public class CaptureManager extends NetworkManager
 		io.getInput(DDRFifo.INPUT_DATA) <== packerK.getOutput("captureDataPacked");
 
 		unpackerK.getInput("captureDataPacked") <== io.getOutput(DDRFifo.OUTPUT_DATA);
-//		unpackerK.getInput("captureDataPacked") <== packerK.getOutput("captureDataPacked");
 
 		Fanout fan = fanout("fan");
 		fan.getInput() <== unpackerK.getOutput("captureDatas");
@@ -119,7 +123,6 @@ public class CaptureManager extends NetworkManager
 
 		cpuFormatterK.getInput("captureData") <== fan.addOutput("cpu");
 		toCpu <== cpuFormatterK.getOutput("cpuCaptureData");
-
 	}
 
 	public static EngineInterface createCaptureInterface( )
@@ -145,6 +148,7 @@ public class CaptureManager extends NetworkManager
 		ei.setScalar("SenderK", "socketsALen", socketsALen);
 		ei.setScalar("SenderK", "socketsBLen", socketsBLen);
 
+		// set pool A sockets
 		for( int i=0; i<serverCountMax; i++ )
 		{
 			InterfaceParam socket = socketsA.get(i);
@@ -152,6 +156,7 @@ public class CaptureManager extends NetworkManager
 			ei.setScalar("SenderK", name, socket);
 		}
 
+		// set pool B sockets
 		for( int i=0; i<serverCountMax; i++ )
 		{
 			InterfaceParam socket = socketsB.get(i);
@@ -159,6 +164,7 @@ public class CaptureManager extends NetworkManager
 			ei.setScalar("SenderK", name, socket);
 		}
 
+		// enable routing of capture data to server
 		ei.route("fan -> server");
 
 		ei.ignoreAll(Direction.IN_OUT);
@@ -173,6 +179,8 @@ public class CaptureManager extends NetworkManager
 		InterfaceParam size = len * (types.captureDataPaddedType.getTotalBits() / 8);
 
 		ei.setStream("toCpu", CPUTypes.UINT64, size);
+
+		// enable routing of capture data to CPU
 		ei.route("fan -> cpu");
 
 		ei.ignoreAll(Direction.IN_OUT);

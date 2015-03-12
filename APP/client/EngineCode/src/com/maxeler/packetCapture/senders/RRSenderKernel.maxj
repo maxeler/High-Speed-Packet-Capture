@@ -8,8 +8,8 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
 import com.maxeler.maxcompiler.v2.utils.MathUtils;
 import com.maxeler.packetCapture.types.Types;
 
-/*
- * A sender kernel which services sockets in a round robin fashion.
+/**
+ * A sender kernel which sends packets to a pool of servers in a round robin fashion.
  */
 public class RRSenderKernel extends PacketSenderKernel
 {

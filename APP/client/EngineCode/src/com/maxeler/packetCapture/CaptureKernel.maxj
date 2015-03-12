@@ -11,6 +11,9 @@ import com.maxeler.packetCapture.types.CaptureDataType;
 import com.maxeler.packetCapture.types.TimeStampFormat;
 import com.maxeler.packetCapture.types.Types;
 
+/**
+ * Creates capture data from an Ethernet frame and time stamp
+ */
 class CaptureKernel extends Kernel
 {
 	CaptureKernel( KernelParameters parameters, Types types )

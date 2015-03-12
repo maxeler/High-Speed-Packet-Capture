@@ -10,8 +10,7 @@ import com.maxeler.packetCapture.types.CpuCaptureDataType;
 import com.maxeler.packetCapture.types.Types;
 
 /**
- * Pads capture data to cpu word boundary
- *
+ * Adapts capture data to a consistent format read by the CPU.
  */
 public class CpuFormatterKernel extends Kernel
 {
@@ -23,18 +22,6 @@ public class CpuFormatterKernel extends Kernel
 		NonBlockingInput<DFEStruct> captureInput = io.nonBlockingInput("captureData", types.captureDataType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
 
 		DFEStruct data = CpuCaptureDataType.INSTANCE.createFromCaptureData(captureInput.data);
-
-//		Counter counter = control.count.makeCounter(control.count.makeParams(64).withEnable(captureInput.valid));
-//
-//		DFEStruct data = CpuCaptureDataType.INSTANCE.newPaddedInstance(this);
-//		data[CpuCaptureDataType.TIMESTAMP_DOUBT] <== constant.var(true);
-//		data[CpuCaptureDataType.TIMESTAMP_VALID] <== constant.var(true);
-//		data[CpuCaptureDataType.TIMESTAMP_VALUE] <== counter.getCount();
-//
-//		data[CpuCaptureDataType.FRAME_SOF] <== constant.var(true);
-//		data[CpuCaptureDataType.FRAME_EOF] <== constant.var(true);
-//		data[CpuCaptureDataType.FRAME_MOD] <== dfeUInt(3).newInstance(this, 7);
-//		data[CpuCaptureDataType.FRAME_DATA] <== counter.getCount().pack();
 
 		captureInput.valid.simWatch("valid");
 		data.simWatch("data");
