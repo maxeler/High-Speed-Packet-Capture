@@ -6,11 +6,11 @@
 #ifndef LOG_H_
 #define LOG_H_
 
-static const char* g_log_ip;
-static int g_log_level;
+static const char* g_log_prepend = "";
+static int g_log_level = 0;
 
-#define logf(level, format, ...) if( g_log_level >= level ) printf("%s: "format, g_log_ip, __VA_ARGS__)
-#define log(level, format) if( g_log_level >= level ) printf("%s: "format, g_log_ip)
+#define logf(level, format, ...) if( g_log_level >= level ) printf("%s: "format, g_log_prepend, __VA_ARGS__)
+#define log(level, format) if( g_log_level >= level ) printf("%s: "format, g_log_prepend)
 #define log_info(format) log(1, format)
 #define logf_info(format, ...) logf(1, format, __VA_ARGS__)
 #define log_debug(format) log(2, format)

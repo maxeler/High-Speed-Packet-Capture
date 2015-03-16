@@ -8,6 +8,9 @@
 #include <assert.h>
 #include <time.h>
 #include <sys/time.h>
+#include <string.h>
+#include <signal.h>
+#include <errno.h>
 
 #include "Maxfiles.h"
 #include "MaxSLiCInterface.h"
@@ -15,69 +18,196 @@
 #include "pcap.h"
 #include "capture_data.h"
 #include "log.h"
+#include "utils.h"
 
-static int CHUNK_SIZE = 16;
-static int BURST_SIZE = 192;
+
+static int PCAP_TZONE = PCAP_TZONE_UTC;
+static int PCAP_SIGFIGS = 0;
+static int PCAP_NETWORK = PCAP_NETWORK_ETHERNET;
+static int PCAP_SNAPLEN = 65535;
+
 static int SERVER_PORT = 2511;
-static max_net_connection_t DFE_CONNECTION = MAX_NET_CONNECTION_QSFP_TOP_10G_PORT2;
-static int SERVERS_MAX = 3;
+static int SERVERS_LEN_MAX = 3;
 static int CAPTURE_DATA_SIZE = 256 / 8;
 
-static int g_log_level;
-static const char* g_log_ip;
+volatile sig_atomic_t g_shutdown = 0;
+
+void handle_exit( int sig )
+{
+	(void) sig;
+
+	g_shutdown = 1;
+
+	// restore original handler
+	struct sigaction sigint_act;
+	sigint_act.sa_handler = SIG_DFL;
+	sigemptyset(&sigint_act.sa_mask);
+	sigaction(SIGINT, &sigint_act, NULL);
+	sigaction(SIGTERM, &sigint_act, NULL);
+
+	printf("Shutting down...\n");
+}
 
 static void dfe_configure_interface( max_engine_t* engine, max_net_connection_t interface, const char* ip, const char* netmask );
 
-static void init_server_capture( max_engine_t * engine, max_net_connection_t dfe_connection, const char* dfe_ip, const char* dfe_netmask, const char* ips[], int ips_len );
+static void init_server_capture( max_engine_t * engine,
+								 max_net_connection_t dfe_if,
+								 const char* dfe_ip,
+								 const char* dfe_netmask,
+								 const char* ipsA[],
+								 int ipsA_len,
+								 const char* ipsB[],
+								 int ipsB_len);
 
-static void local_capture_loop( max_engine_t* engine );
-
-static void start_capture( max_engine_t* engine );
+static void local_read_loop( max_engine_t* engine );
 
 int main( int argc, char** argv )
 {
-	// TODO: parse properly and validate ips
-	// TODO: parse log level
-	// TODO: add local and server capture modes
-	if( argc < 4 )
+	// TODO: add proper arg parsing (port, ipsA, ipsB, log level, local and server capture modes)
+	if( argc < 4 || argc > (3 + SERVERS_LEN_MAX) )
 	{
-		printf("%s: dfe-ip dfe-netmask server-ip0..server-ip%d\n", argv[0], (SERVERS_MAX - 1));
+		printf("%s: dfe-ip dfe-netmask <server-ips>\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
 	const char* dfe_ip = argv[1];
 	const char* dfe_netmask = argv[2];
 
-	const char* server_ips[SERVERS_MAX];
+	const char* server_ips[SERVERS_LEN_MAX];
 	int server_ips_len = 0;
-	for( int i=0; i<SERVERS_MAX && (i + 3)<argc; i++ )
+	for( int i=0; i<SERVERS_LEN_MAX && (i + 3)<argc; i++ )
 	{
 		server_ips[i] = argv[i + 3];
 		server_ips_len++;
 	}
 
-	g_log_ip = dfe_ip;
+	g_log_prepend = dfe_ip;
 	g_log_level = 3;
+	int local_enabled = 0;
 
+	// load bitstream onto DFE
+	log_info("Loading bitstream.\n");
 	max_file_t *maxfile = PacketCapture_init();
 	max_engine_t * engine = max_load(maxfile, "*");
 
+	// configure DFE
 	log_info("Initializing DFE.\n");
-	init_server_capture(engine, DFE_CONNECTION, dfe_ip, dfe_netmask, server_ips, server_ips_len);
+	const char* server_if_name = max_get_constant_string(maxfile, "server_if_name");
+	max_net_connection_t dfe_server_if = -1;
+	int error = max_net_connection_from_name(&dfe_server_if, server_if_name);
+	if( error )
+	{
+		fprintf(stderr, "Error: Unable to lookup max_net_connection for '%s'\n", server_if_name);
+		return EXIT_FAILURE;
+	}
+	init_server_capture(engine, dfe_server_if, dfe_ip, dfe_netmask, server_ips, 1, server_ips + 1, server_ips_len - 1);
 
-	log_info("Starting capture.\n");
-	start_capture(engine);
+	// register signal handler
+	struct sigaction exit_action;
+	exit_action.sa_handler = handle_exit;
+	sigemptyset(&exit_action.sa_mask);
+	sigaction(SIGINT, &exit_action, NULL);
+	sigaction(SIGTERM, &exit_action, NULL);
 
-	log_info("Servicing DFE.\n");
-	local_capture_loop(engine);
+	if( local_enabled )
+	{ // local data transfer
+		log_info("Servicing DFE.\n");
+		local_read_loop(engine);
+	}
+	else
+	{ // hold onto card
+		pause();
+	}
+
+	// cleanup
+	max_unload(engine);
+	engine = NULL;
+	PacketCapture_free();
 
 	return EXIT_SUCCESS;
 }
 
-static void start_capture( max_engine_t* engine )
+static void init_server_capture( max_engine_t * engine,
+								 max_net_connection_t dfe_if,
+								 const char* dfe_ip,
+								 const char* dfe_netmask,
+								 const char* ipsA[],
+								 int ipsA_len,
+								 const char* ipsB[],
+								 int ipsB_len)
 {
-	PacketCapture_capture_actions_t capture_actions = { };
-	PacketCapture_capture_run(engine, &capture_actions);
+	assert(engine != NULL);
+	assert(dfe_ip != NULL);
+	assert(dfe_netmask != NULL);
+	assert(ipsA != NULL);
+	assert(ipsB != NULL);
+	assert(ipsA_len > 0);
+	assert(ipsB_len > 0);
+
+	int ips_len = ipsA_len + ipsB_len;
+	const char* ips[ips_len];
+
+	int i=0;
+	for( int j=0; j<ipsA_len; j++, i++ )
+	{
+			ips[i] = ipsA[j];
+	}
+	for( int j=0; j<ipsB_len; j++, i++ )
+	{
+			ips[i] = ipsB[j];
+	}
+
+	// init networking connection
+	dfe_configure_interface(engine, dfe_if, dfe_ip, dfe_netmask);
+
+	// create sockets
+	int socks_len = ipsA_len + ipsB_len;
+	max_tcp_socket_t* socks[socks_len];
+	uint8_t sock_nums[socks_len];
+	uint8_t* sockA_nums = sock_nums;
+	uint8_t* sockB_nums = sock_nums + ipsA_len;
+
+	for( int i=0; i<socks_len; i++ )
+	{
+		max_tcp_socket_t* sock = max_tcp_create_socket(engine, "serverStream");
+		sock_nums[i] = max_tcp_get_socket_number(sock);
+		socks[i] = sock;
+	}
+
+	// connect sockets
+	log_info("Connecting to servers...\n");
+	for( int i=0; i<ips_len; i++ )
+	{
+		const char* ip = ips[i];
+		max_tcp_socket_t* sock = socks[i];
+
+		struct in_addr ip_addr;
+		inet_aton(ip, &ip_addr);
+
+		max_tcp_connect(sock, &ip_addr, SERVER_PORT);
+	}
+
+	// wait for sockets to connect
+	for( int i=0; i<ips_len; i++ )
+	{
+		const char* ip = ips[i];
+		max_tcp_socket_t* sock = socks[i];
+
+		logf_info("Waiting on %s...\n", ip);
+		max_tcp_await_state(sock, MAX_TCP_STATE_ESTABLISHED, NULL);
+	}
+
+	log_info("Running.\n");
+
+	// configure DFE with socket handles
+	PacketCapture_enableRemoteCapture_actions_t action =
+	{
+		.param_socketsALen = ipsA_len,
+		.param_socketsA = sockA_nums,
+		.param_socketsBLen = ipsB_len,
+		.param_socketsB = sockB_nums,
+	};
+	PacketCapture_enableRemoteCapture_run(engine, &action);
 }
 
 static void dfe_configure_interface( max_engine_t* engine, max_net_connection_t interface, const char* ip, const char* netmask )
@@ -94,87 +224,30 @@ static void dfe_configure_interface( max_engine_t* engine, max_net_connection_t 
 	max_ip_config(engine, interface, &ip_addr, &netmask_addr);
 }
 
-static void init_server_capture( max_engine_t * engine, max_net_connection_t dfe_connection, const char* dfe_ip, const char* dfe_netmask, const char* ips[], int ips_len )
-{
-	assert(engine != NULL);
-	assert(dfe_ip != NULL);
-	assert(dfe_netmask != NULL);
-	assert(ips != NULL);
-	assert(ips_len > 0);
-
-	// init networking connection
-	dfe_configure_interface(engine, dfe_connection, dfe_ip, dfe_netmask);
-
-	// create sockets
-	max_tcp_socket_t* sockets[ips_len];
-	uint8_t socket_nums[ips_len];
-	for( int i=0; i<ips_len; i++ )
-	{
-		max_tcp_socket_t* sock = max_tcp_create_socket(engine, "serverStream");
-		uint8_t socket_num = max_tcp_get_socket_number(sock);
-
-		sockets[i] = sock;
-		socket_nums[i] = socket_num;
-	}
-
-	// connect sockets
-	log_info("Connecting to servers...\n");
-	for( int i=0; i<ips_len; i++ )
-	{
-		const char* ip = ips[i];
-		max_tcp_socket_t* sock = sockets[i];
-
-		struct in_addr ip_addr;
-		inet_aton(ip, &ip_addr);
-
-		max_tcp_connect(sock, &ip_addr, SERVER_PORT);
-	}
-
-	// wait for sockets to connect
-	for( int i=0; i<ips_len; i++ )
-	{
-		const char* ip = ips[i];
-		max_tcp_socket_t* sock = sockets[i];
-
-		logf_info("Waiting on %s...\n", ip);
-		max_tcp_await_state(sock, MAX_TCP_STATE_ESTABLISHED, NULL);
-	}
-
-	// configure dfe with socket handles
-	PacketCapture_configServers_actions_t config_servers_action =
-	{
-		.param_socketsALen = 1,
-		.param_socketsA = socket_nums,
-		.param_socketsBLen = ips_len - 1,
-		.param_socketsB = socket_nums + 1,
-	};
-	PacketCapture_configServers_run(engine, &config_servers_action);
-}
-
-static void local_capture_loop( max_engine_t* engine )
+static void local_read_loop( max_engine_t* engine )
 {
 	int frames_len = 2;
 	int data_size = CAPTURE_DATA_SIZE * frames_len;
 
 	FILE* file = fopen("./capture.pcap", "w+");
-	pcap_t* pcap = pcap_create(file, 0, 1, 0, 65535);
+	pcap_t* pcap = pcap_create(file, PCAP_TZONE, PCAP_NETWORK, PCAP_SIGFIGS, PCAP_SNAPLEN);
 	assert(pcap != NULL);
 
 	pcap_packet_t* packet = NULL;
 	int sof_expected = 1;
 	size_t total_packets = 0;
-	while( 1 )
+	while( !g_shutdown )
 	{
 		logf_debug("Reading %d frames (%dB)\n", frames_len, data_size);
 		log_debug("\n");
 		uint64_t* data = malloc(data_size);
 		assert(data != NULL);
-		PacketCapture_local_actions_t local_action =
+		PacketCapture_readCaptureData_actions_t action =
 		{
 			.param_len = frames_len,
 			.outstream_toCpu = data,
 		};
-		PacketCapture_local_run(engine, &local_action);
+		PacketCapture_readCaptureData_run(engine, &action);
 
 		// debug print data
 		if( g_log_level >= 3 )
@@ -183,7 +256,7 @@ static void local_capture_loop( max_engine_t* engine )
 			char str[BUFSIZ];
 			int str_len = 0;
 			str_len += snprintf((str + str_len), BUFSIZ, "read %dB: ", data_size);
-			for( int i=0; i<data_len; i++ )
+			for( size_t i=0; i<data_len; i++ )
 			{
 				if( i != 0 )
 				{
@@ -221,11 +294,11 @@ static void local_capture_loop( max_engine_t* engine )
 			int sof = frame_get_sof(frame);
 			int eof = frame_get_eof(frame);
 
-//			assert(sof_expected == sof);
-			if( sof_expected != sof )
-			{
-				fprintf(stderr, "\n\n*** ERROR: expected %d but got %d.\n\n", sof_expected, sof);
-			}
+			assert(sof_expected == sof);
+//			if( sof_expected != sof )
+//			{
+//				fprintf(stderr, "\n\n*** ERROR: expected %d but got %d.\n\n", sof_expected, sof);
+//			}
 
 			if( sof )
 			{
@@ -274,5 +347,8 @@ static void local_capture_loop( max_engine_t* engine )
 		}
 	}
 
-	// TODO: cleanup
+	// cleanup
+	pcap_flush(pcap);
+	fclose(file);
+	file = NULL;
 }

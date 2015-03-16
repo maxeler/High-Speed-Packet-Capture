@@ -33,15 +33,15 @@ public class CaptureManager extends NetworkManager
 	private static final long FIFO_DEPTH = 16 * 1024 * 1024;
 
 	// TODO: write to maxfile constant
-	private static final Max4NetworkConnection CAPTURE_PORT = Max4NetworkConnection.QSFP_TOP_10G_PORT1;
-	private static final Max4NetworkConnection SERVER_PORT = Max4NetworkConnection.QSFP_TOP_10G_PORT2;
+	private static final Max4NetworkConnection CAPTURE_IF = Max4NetworkConnection.QSFP_TOP_10G_PORT1;
+	private static final Max4NetworkConnection SERVER_IF = Max4NetworkConnection.QSFP_TOP_10G_PORT2;
 
 	// TODO: write to maxfile constant
 	private static final int TIME_PRECISION = 8;
 
 	public static void main( String[] args )
 	{
-		// "word size" which capture data will be padded up to when written to lmem.
+		// "word size" which capture data will be padded up to when written to LMEM.
 		// note: must be a multiple of memory controller burst size
 		int lmemWriteBits = BURST_BITS * 2;
 		// "word size" which capture data will be padded up to when transfered from DFE to CPU
@@ -53,8 +53,11 @@ public class CaptureManager extends NetworkManager
 		EngineParameters params = new EngineParameters(args);
 		CaptureManager manager = new CaptureManager(params, types);
 
-		manager.createSLiCinterface(createCaptureInterface());
-		manager.createSLiCinterface(createConfigServersInterface(SERVER_COUNT_MAX));
+		// max constants
+		manager.addMaxFileStringConstant("server_if_name", SERVER_IF.name());
+
+		// create CPU interfaces
+		manager.createSLiCinterface(createRemoteInterface(SERVER_COUNT_MAX));
 		manager.createSLiCinterface(createLocalInterface(types));
 
 		manager.debug.setDebugLevel(new DebugLevel(){{this.setHasStreamStatus(true);}});
@@ -67,7 +70,7 @@ public class CaptureManager extends NetworkManager
 		super(params);
 
 		// create capture input
-		EthernetStream capturePort = addEthernetStream("dataIn", CAPTURE_PORT, EthernetChecksumMode.DropBadFrames);
+		EthernetStream capturePort = addEthernetStream("dataIn", CAPTURE_IF, EthernetChecksumMode.DropBadFrames);
 
 		// create lmem buffer
 		StateMachineBlock wire = addStateMachine("cmdWire", new SimpleWire(this, 64));
@@ -93,7 +96,7 @@ public class CaptureManager extends NetworkManager
 		DFELink toCpu = addStreamToCPU("toCpu");
 
 		// create network stream
-		TCPStream serverStream = addTCPStream("serverStream", SERVER_PORT);
+		TCPStream serverStream = addTCPStream("serverStream", SERVER_IF);
 
 		// create time stamp stream
 		this.pushTimestampSource(TimestampSource.HOST_CLOCK);
@@ -125,18 +128,9 @@ public class CaptureManager extends NetworkManager
 		toCpu <== cpuFormatterK.getOutput("cpuCaptureData");
 	}
 
-	public static EngineInterface createCaptureInterface( )
+	public static EngineInterface createRemoteInterface( int serverCountMax )
 	{
-		EngineInterface ei = new EngineInterface("capture");
-
-		ei.ignoreAll(Direction.IN_OUT);
-
-		return ei;
-	}
-
-	public static EngineInterface createConfigServersInterface( int serverCountMax )
-	{
-		EngineInterface ei = new EngineInterface("configServers");
+		EngineInterface ei = new EngineInterface("enableRemoteCapture");
 
 		InterfaceParam socketsALen = ei.addParam("socketsALen", CPUTypes.UINT8);
 		InterfaceParamArray socketsA = ei.addParamArray("socketsA", CPUTypes.UINT8);
@@ -168,12 +162,13 @@ public class CaptureManager extends NetworkManager
 		ei.route("fan -> server");
 
 		ei.ignoreAll(Direction.IN_OUT);
+
 		return ei;
 	}
 
 	public static EngineInterface createLocalInterface( Types types )
 	{
-		EngineInterface ei = new EngineInterface("local");
+		EngineInterface ei = new EngineInterface("readCaptureData");
 
 		InterfaceParam len = ei.addParam("len", CPUTypes.UINT64);
 		InterfaceParam size = len * (types.captureDataPaddedType.getTotalBits() / 8);
@@ -184,6 +179,7 @@ public class CaptureManager extends NetworkManager
 		ei.route("fan -> cpu");
 
 		ei.ignoreAll(Direction.IN_OUT);
+
 		return ei;
 	}
 }

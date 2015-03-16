@@ -36,6 +36,7 @@
 									<listOptionValue builtIn="false" value="/network-raid/opt/intel/composer_xe_2011_sp1.7.256/composer_xe_2011_sp1.7.256/tbb/include"/>
 									<listOptionValue builtIn="false" value="&quot;${MAXCOMPILERDIR}/include/slic/&quot;"/>
 									<listOptionValue builtIn="false" value="../../RunRules/Simulation/include"/>
+									<listOptionValue builtIn="false" value="../../../common"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.80248221" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>

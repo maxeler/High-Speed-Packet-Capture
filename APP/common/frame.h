@@ -19,7 +19,7 @@ typedef struct frame_s
 
 extern frame_t FRAME_EMPTY;
 
-frame_t* frame_init( int sof, int eof, int mod, uint64_t* data );
+frame_t* frame_init( int sof, int eof, int mod, uint64_t data );
 
 frame_t* frame_parse( uint64_t raw[2] );
 

@@ -15,6 +15,11 @@ struct capture_data_s
 	frame_t* frame;
 };
 
+
+/*
+ * Create time stamp from CPU capture data bits.
+ * Data must not be NULL.
+ */
 static timestamp_t* parse_timestamp( uint64_t* data )
 {
 	assert(data != NULL);
@@ -26,6 +31,10 @@ static timestamp_t* parse_timestamp( uint64_t* data )
 	return timestamp_init(doubt, valid, value);
 }
 
+/*
+ * Create frame from CPU capture data bits.
+ * Data must not be NULL.
+ */
 static frame_t* parse_frame( uint64_t* data )
 {
 	assert(data != NULL);
@@ -35,7 +44,7 @@ static frame_t* parse_frame( uint64_t* data )
 	int mod = data[2] >> 4 & 0x7;
 	uint64_t frame_data = data[1];
 
-	return frame_init(sof, eof, mod, &frame_data);
+	return frame_init(sof, eof, mod, frame_data);
 }
 
 capture_data_t* capture_data_parse( uint64_t data[4] )

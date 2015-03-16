@@ -18,11 +18,19 @@
 #include <time.h>
 #include <stdarg.h>
 #include <math.h>
+#include <signal.h>
+#include <sys/select.h>
 
 #include "pcap.h"
 #include "log.h"
 #include "capture_data.h"
 
+
+enum read_mode_e
+{
+	READ_MODE_HEADER,
+	READ_MODE_DATA,
+};
 
 static const int NUM_CONECTIONS = 1;
 static const int HEADER_SIZE = 1;
@@ -30,16 +38,11 @@ static const int DATA_TIMESTAMP_SIZE = 8;
 static const int DATA_FRAME_SIZE_MAX = 8;
 #define DATA_SIZE_MAX (DATA_TIMESTAMP_SIZE + DATA_FRAME_SIZE_MAX)
 
-static void report_errno( const char* msg, int errnum )
-{
-	fprintf(stderr, "%s: %s (errno=%d)\n", msg, strerror(errnum), errnum);
-}
+volatile sig_atomic_t g_shutdown = 0;
 
-enum read_mode_e
-{
-	READ_MODE_HEADER,
-	READ_MODE_DATA,
-};
+void handle_exit( int sig );
+
+static void report_errno( const char* msg, int errnum );
 
 void parse_header( capture_data_t* data, uint64_t buffer[1] );
 
@@ -48,6 +51,10 @@ void parse_data( capture_data_t* data, uint64_t buffer[1] );
 void process_capture_data( pcap_t* pcap, capture_data_t* data );
 
 static int handle_client( pcap_t* pcap, int conh );
+
+static int read_data( int fd, uint64_t* buffer, ssize_t read_size );
+
+static void print_data( uint8_t* buffer, ssize_t buffer_size );
 
 int main( int argc, char* argv[] )
 {
@@ -65,7 +72,7 @@ int main( int argc, char* argv[] )
 	const int port = strtol(argv[2], NULL, 10);
 	const char* filePath = argv[3];
 
-	g_log_ip = ip;
+	g_log_prepend = ip;
 	g_log_level = 3;
 
 	// init pcap
@@ -99,14 +106,12 @@ int main( int argc, char* argv[] )
 		return EXIT_FAILURE;
 	}
 
-
 	error = bind(sock_num, (const struct sockaddr*) &addr, sizeof(addr));
 	if( error )
 	{
 		report_errno("Unable to bind socket", errno);
 		return EXIT_FAILURE;
 	}
-
 
 	error = listen(sock_num, NUM_CONECTIONS);
 	if( error )
@@ -116,7 +121,7 @@ int main( int argc, char* argv[] )
 	}
 
 	// accept a client
-	while( 1 )
+	while( !g_shutdown )
 	{
 		log_info("Waiting for client...\n");
 
@@ -133,7 +138,7 @@ int main( int argc, char* argv[] )
 			char client_ip[INET_ADDRSTRLEN];
 			inet_ntop(AF_INET, &(client_addr.sin_addr), client_ip, INET_ADDRSTRLEN);
 			const int client_port = ntohs(client_addr.sin_port);
-			logf_info("Client connected %s:%d.\n", client_ip, client_port);
+			logf_info("Client connected %s: %d.\n", client_ip, client_port);
 
 			int error = handle_client(pcap, con_fd);
 			if( error )
@@ -143,7 +148,12 @@ int main( int argc, char* argv[] )
 		}
 	}
 
-	// TODO: cleanup
+	// cleanup
+	pcap_flush(pcap);
+	fclose(file);
+	file = NULL;
+
+	return EXIT_SUCCESS;
 }
 
 static int handle_client( pcap_t* pcap, int con_fd )
@@ -161,41 +171,31 @@ static int handle_client( pcap_t* pcap, int con_fd )
 		.timestamp = &timestamp,
 	};
 
-	// TODO: keep alive
+	// register signal handler
+	struct sigaction exit_action;
+	exit_action.sa_handler = handle_exit;
+	sigemptyset(&exit_action.sa_mask);
+	sigaction(SIGINT, &exit_action, NULL);
+	sigaction(SIGTERM, &exit_action, NULL);
 
+	// service socket
 	while( 1 )
 	{
-		// read until expected bytes received
 		memset(buffer, 0, buffer_size);
-		ssize_t nbytes = 0;
-		while( nbytes < read_size )
+		int error = read_data(con_fd, buffer, read_size);
+		if( error == 2 )
+		{ // shutting down
+			break;
+		}
+		else if( error )
 		{
-			nbytes += read(con_fd, (buffer + nbytes), (read_size - nbytes));
-
-			if( nbytes == -1 )
-			{
-				report_errno("Unable to receive data from socket", errno);
-				return 1;
-			}
+			report_errno("Unable to read data from socket", errno);
+			return 1;
 		}
 
-		// debug print data
 		if( g_log_level >= 2 )
 		{
-			uint8_t* buffer8 = (uint8_t*) buffer;
-			char str[BUFSIZ];
-			int str_len = 0;
-			str_len += snprintf((str + str_len), BUFSIZ, "read %ldB: ", nbytes);
-			for( int i=0; (i * sizeof(*buffer8))<nbytes; i++ )
-			{
-				if( i != 0 )
-				{
-					str_len += snprintf((str + str_len), (BUFSIZ - str_len), ".");
-				}
-				str_len += snprintf((str + str_len), (BUFSIZ - str_len), "%02"PRIx8, buffer8[i]);
-			}
-			snprintf((str + str_len), (BUFSIZ - str_len), "\n");
-			logf_debug("%s", str);
+			print_data((uint8_t*) buffer, read_size);
 		}
 
 		// process data
@@ -203,17 +203,18 @@ static int handle_client( pcap_t* pcap, int con_fd )
 		{
 			case READ_MODE_HEADER:
 			{
-				// clear
+				// reset
 				*(capture_data.timestamp) = TIMESTAMP_EMPTY;
 				*(capture_data.frame) = FRAME_EMPTY;
 
+				// process
 				parse_header(&capture_data, buffer);
 
 				// config next mode
 				read_mode = READ_MODE_DATA;
 				read_size = DATA_TIMESTAMP_SIZE + frame_get_size(capture_data.frame);
 
-				// packet count
+				// report stats
 				if( frame.eof )
 				{
 					total_packets++;
@@ -224,6 +225,7 @@ static int handle_client( pcap_t* pcap, int con_fd )
 			}
 			case READ_MODE_DATA:
 			{
+				// process
 				parse_data(&capture_data, buffer);
 				process_capture_data(pcap, &capture_data);
 
@@ -236,7 +238,85 @@ static int handle_client( pcap_t* pcap, int con_fd )
 		}
 	}
 
+	// cleanup
+	free(buffer);
+	buffer = NULL;
+
 	return 0;
+}
+
+static int read_data( int fd, uint64_t* buffer, ssize_t read_size )
+{
+	ssize_t nbytes = 0;
+	while( nbytes < read_size && !g_shutdown )
+	{
+		// wait w/ timeout for data
+		fd_set readfds;
+		FD_ZERO(&readfds);
+		FD_SET(fd, &readfds);
+
+		struct timeval timeout = {
+			.tv_sec = 1,
+			.tv_usec = 0,
+		};
+
+		int status = select(1, &readfds, NULL, NULL, &timeout);
+
+		if( status == -1 )
+		{ // error
+			if( errno == EINTR )
+			{ // interrupted by signal
+				// retry
+				continue;
+			}
+			else
+			{ // fatal
+				report_errno("Select failed", errno);
+				return 1;
+			}
+		}
+		else if( status == 0 )
+		{ // data not available
+			// retry
+			continue;
+		}
+		else // status == 1
+		{ // read ready
+			nbytes += read(fd, (buffer + nbytes), (read_size - nbytes));
+
+			if( nbytes == -1 )
+			{ // error
+				report_errno("Unable to receive data from socket", errno);
+				return 1;
+			}
+		}
+	}
+
+	if( g_shutdown )
+	{
+		return 2;
+	}
+	else
+	{
+		return 0;
+	}
+}
+
+static void print_data( uint8_t* buffer, ssize_t buffer_size )
+{
+	char str[BUFSIZ];
+	int str_len = 0;
+	str_len += snprintf((str + str_len), BUFSIZ, "read %ldB: ", buffer_size);
+	for( int i=0; (i * sizeof(*buffer))<buffer_size; i++ )
+	{
+		if( i != 0 )
+		{
+			str_len += snprintf((str + str_len), (BUFSIZ - str_len), ".");
+		}
+		str_len += snprintf((str + str_len), (BUFSIZ - str_len), "%02"PRIx8, buffer[i]);
+	}
+	snprintf((str + str_len), (BUFSIZ - str_len), "\n");
+	logf_debug("%s", str);
 }
 
 void parse_header( capture_data_t* data, uint64_t buffer[1] )
@@ -311,4 +391,25 @@ void process_capture_data( pcap_t* pcap, capture_data_t* data )
 
 		sof_expected = 1;
 	}
+}
+
+void handle_exit( int sig )
+{
+	(void) sig;
+
+	g_shutdown = 1;
+
+	// restore original handler
+	struct sigaction sigint_act;
+	sigint_act.sa_handler = SIG_DFL;
+	sigemptyset(&sigint_act.sa_mask);
+	sigaction(SIGINT, &sigint_act, NULL);
+	sigaction(SIGTERM, &sigint_act, NULL);
+
+	printf("Shutting down...\n");
+}
+
+static void report_errno( const char* msg, int errnum )
+{
+	fprintf(stderr, "%s: %s (errno=%d)\n", msg, strerror(errnum), errnum);
 }

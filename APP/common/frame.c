@@ -12,10 +12,8 @@
 
 frame_t FRAME_EMPTY = {0};
 
-frame_t* frame_init( int sof, int eof, int mod, uint64_t* data )
+frame_t* frame_init( int sof, int eof, int mod, uint64_t data )
 {
-	assert(data != NULL);
-
 	frame_t* this = malloc(sizeof(frame_t));
 	if( this == NULL )
 	{
@@ -25,7 +23,7 @@ frame_t* frame_init( int sof, int eof, int mod, uint64_t* data )
 	this->sof = sof;
 	this->eof = eof;
 	this->mod = mod;
-	this->data = *data;
+	this->data = data;
 
 	return this;
 }

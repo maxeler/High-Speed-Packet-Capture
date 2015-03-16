@@ -9,6 +9,10 @@
 #include <stdio.h>
 #include <inttypes.h>
 
+
+#define PCAP_NETWORK_ETHERNET   1
+#define PCAP_TZONE_UTC          0
+
 typedef struct pcap_packet_s pcap_packet_t;
 
 typedef struct pcap_s pcap_t;
