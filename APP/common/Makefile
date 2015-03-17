@@ -9,7 +9,7 @@ OBJ_DIR := .objects
 CC := gcc
 AR := ar
 
-SOURCES := frame.c pcap.c timestamp.c
+SOURCES := $(wildcard *.c)
 OBJECTS := $(addprefix $(OBJ_DIR)/, $(SOURCES:.c=.o))
 
 
@@ -23,7 +23,7 @@ lib$(LIB_NAME).a: $(OBJECTS)
 $(OBJ_DIR):
 	mkdir $(OBJ_DIR)
 
-$(OBJ_DIR)/%.o: %.c $(OBJ_DIR)
+$(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
