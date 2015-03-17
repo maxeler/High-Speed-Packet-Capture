@@ -32,22 +32,6 @@ static int CAPTURE_DATA_SIZE = 256 / 8;
 
 volatile sig_atomic_t g_shutdown = 0;
 
-void handle_exit( int sig )
-{
-	(void) sig;
-
-	g_shutdown = 1;
-
-	// restore original handler
-	struct sigaction sigint_act;
-	sigint_act.sa_handler = SIG_DFL;
-	sigemptyset(&sigint_act.sa_mask);
-	sigaction(SIGINT, &sigint_act, NULL);
-	sigaction(SIGTERM, &sigint_act, NULL);
-
-	printf("Shutting down...\n");
-}
-
 static void dfe_configure_interface( max_engine_t* engine, max_net_connection_t interface, const char* ip, const char* netmask );
 
 static void init_server_capture( max_engine_t * engine,
@@ -59,7 +43,7 @@ static void init_server_capture( max_engine_t * engine,
 								 const char* ipsB[],
 								 int ipsB_len);
 
-static void local_read_loop( max_engine_t* engine );
+static int local_read_loop( max_engine_t* engine );
 
 int main( int argc, char** argv )
 {
@@ -82,8 +66,8 @@ int main( int argc, char** argv )
 	}
 
 	g_log_prepend = dfe_ip;
-	g_log_level = 3;
-	int local_enabled = 0;
+	g_log_level = LOG_LEVEL_TRACE;
+	int local_enabled = 1;
 
 	// load bitstream onto DFE
 	log_info("Loading bitstream.\n");
@@ -102,17 +86,16 @@ int main( int argc, char** argv )
 	}
 	init_server_capture(engine, dfe_server_if, dfe_ip, dfe_netmask, server_ips, 1, server_ips + 1, server_ips_len - 1);
 
-	// register signal handler
-	struct sigaction exit_action;
-	exit_action.sa_handler = handle_exit;
-	sigemptyset(&exit_action.sa_mask);
-	sigaction(SIGINT, &exit_action, NULL);
-	sigaction(SIGTERM, &exit_action, NULL);
-
 	if( local_enabled )
 	{ // local data transfer
 		log_info("Servicing DFE.\n");
-		local_read_loop(engine);
+
+		error = local_read_loop(engine);
+		if( error )
+		{
+			fprintf(stderr, "Error: Unable to read local capture data\n");
+			return EXIT_FAILURE;
+		}
 	}
 	else
 	{ // hold onto card
@@ -224,7 +207,7 @@ static void dfe_configure_interface( max_engine_t* engine, max_net_connection_t 
 	max_ip_config(engine, interface, &ip_addr, &netmask_addr);
 }
 
-static void local_read_loop( max_engine_t* engine )
+static int local_read_loop( max_engine_t* engine )
 {
 	int frames_len = 2;
 	int data_size = CAPTURE_DATA_SIZE * frames_len;
@@ -233,6 +216,10 @@ static void local_read_loop( max_engine_t* engine )
 	pcap_t* pcap = pcap_create(file, PCAP_TZONE, PCAP_NETWORK, PCAP_SIGFIGS, PCAP_SNAPLEN);
 	assert(pcap != NULL);
 
+	// disable pcie timeout
+	max_config_set_int64(MAX_CONFIG_PCIE_TIMEOUT, 0);
+
+	// service
 	pcap_packet_t* packet = NULL;
 	int sof_expected = 1;
 	size_t total_packets = 0;
@@ -240,17 +227,18 @@ static void local_read_loop( max_engine_t* engine )
 	{
 		logf_debug("Reading %d frames (%dB)\n", frames_len, data_size);
 		log_debug("\n");
-		uint64_t* data = malloc(data_size);
+
+		uint64_t* data = calloc(1, data_size);
 		assert(data != NULL);
-		PacketCapture_readCaptureData_actions_t action =
-		{
+
+		PacketCapture_readCaptureData_actions_t action = {
 			.param_len = frames_len,
 			.outstream_toCpu = data,
 		};
 		PacketCapture_readCaptureData_run(engine, &action);
 
 		// debug print data
-		if( g_log_level >= 3 )
+		if( g_log_level >= LOG_LEVEL_TRACE )
 		{
 			size_t data_len = data_size / sizeof(*data);
 			char str[BUFSIZ];
@@ -351,4 +339,6 @@ static void local_read_loop( max_engine_t* engine )
 	pcap_flush(pcap);
 	fclose(file);
 	file = NULL;
+
+	return 0;
 }

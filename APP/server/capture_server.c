@@ -73,7 +73,7 @@ int main( int argc, char* argv[] )
 	const char* filePath = argv[3];
 
 	g_log_prepend = ip;
-	g_log_level = 3;
+	g_log_level = LOG_LEVEL_TRACE;
 
 	// init pcap
 	FILE* file = fopen(filePath, "w+");
@@ -193,7 +193,7 @@ static int handle_client( pcap_t* pcap, int con_fd )
 			return 1;
 		}
 
-		if( g_log_level >= 2 )
+		if( g_log_level >= LOG_LEVEL_INFO )
 		{
 			print_data((uint8_t*) buffer, read_size);
 		}
