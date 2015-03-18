@@ -6,7 +6,7 @@
 #ifndef LOG_H_
 #define LOG_H_
 
-static const char* g_log_prepend = "";
+const char* g_log_prepend = "";
 static int g_log_level = 0;
 
 static const int LOG_LEVEL_TRACE = 3;
