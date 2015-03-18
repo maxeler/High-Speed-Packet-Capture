@@ -32,6 +32,7 @@ enum read_mode_e
 	READ_MODE_DATA,
 };
 
+static const int PORT = 2511;
 static const int NUM_CONECTIONS = 1;
 static const int HEADER_SIZE = 1;
 static const int DATA_TIMESTAMP_SIZE = 8;
@@ -62,15 +63,14 @@ int main( int argc, char* argv[] )
 
 	// parse args
 	// TODO: parse safely/properly
-	if( argc != 4 )
+	if( argc != 3 )
 	{
-		fprintf(stderr, "%s: ip port file.pcap\n", argv[0]);
+		fprintf(stderr, "%s: ip file.pcap\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
 	const char* ip = argv[1];
-	const int port = strtol(argv[2], NULL, 10);
-	const char* filePath = argv[3];
+	const char* filePath = argv[2];
 
 	g_log_prepend = ip;
 	g_log_level = LOG_LEVEL_TRACE;
@@ -98,7 +98,7 @@ int main( int argc, char* argv[] )
 
 	struct sockaddr_in addr = {0};
 	addr.sin_family = AF_INET;
-	addr.sin_port = htons(port);
+	addr.sin_port = htons(PORT);
 	int status = inet_aton(ip, &addr.sin_addr);
 	if( status == 0 )
 	{
@@ -182,6 +182,7 @@ static int handle_client( pcap_t* pcap, int con_fd )
 	while( 1 )
 	{
 		memset(buffer, 0, buffer_size);
+
 		int error = read_data(con_fd, buffer, read_size);
 		if( error == 2 )
 		{ // shutting down
@@ -248,7 +249,7 @@ static int handle_client( pcap_t* pcap, int con_fd )
 static int read_data( int fd, uint64_t* buffer, ssize_t read_size )
 {
 	ssize_t nbytes = 0;
-	while( nbytes < read_size && !g_shutdown )
+	while( (nbytes < read_size) && !g_shutdown )
 	{
 		// wait w/ timeout for data
 		fd_set readfds;
@@ -260,7 +261,7 @@ static int read_data( int fd, uint64_t* buffer, ssize_t read_size )
 			.tv_usec = 0,
 		};
 
-		int status = select(1, &readfds, NULL, NULL, &timeout);
+		int status = select((fd + 1), &readfds, NULL, NULL, &timeout);
 
 		if( status == -1 )
 		{ // error

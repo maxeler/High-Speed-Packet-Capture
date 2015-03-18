@@ -2,7 +2,6 @@
 SERVER=./capture_server
 IF=tap1
 IPS=(5.5.5.3 5.5.5.4 5.5.5.5)
-PORT=2511
 MASK=24
 
 CAPTURE_DIR=./captures
@@ -42,7 +41,7 @@ do
 	then
 		unbuffer $SERVER $ip $PORT $CAPTURE_DIR/$file 2>&1 | tee $LOG_DIR/log_$ip&
 	else
-		$SERVER $ip $PORT $CAPTURE_DIR/$file&
+		$SERVER $ip $CAPTURE_DIR/$file&
 	fi
 done
 echo "(Press enter to exit)"
