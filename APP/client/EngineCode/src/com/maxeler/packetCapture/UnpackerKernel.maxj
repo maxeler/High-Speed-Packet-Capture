@@ -1,0 +1,34 @@
+package com.maxeler.packetCapture;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.DelimiterMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.packetCapture.types.Types;
+
+/**
+ * Removes the padding added by PackerKernel
+ */
+public class UnpackerKernel extends Kernel
+{
+	protected UnpackerKernel( KernelParameters parameters, Types types )
+	{
+		super(parameters);
+		flush.disabled();
+
+		NonBlockingInput<DFEStruct> dataInput = io.nonBlockingInput("captureDataPacked", types.captureDataPackedType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
+
+		DFEStruct packed = dataInput.data;
+		DFEVector<DFEVar> captureDatas = packed["captureDatas"];
+
+		dataInput.valid.simWatch("valid");
+		packed.simWatch("packedFrames");
+
+		io.output("captureDatas", captureDatas, types.captureDatasType, dataInput.valid);
+	}
+
+}

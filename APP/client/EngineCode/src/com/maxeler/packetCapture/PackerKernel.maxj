@@ -1,0 +1,34 @@
+package com.maxeler.packetCapture;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.DelimiterMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.packetCapture.types.Types;
+
+/**
+ *	Pads captureData up to types.captureDataPackedType bits for writing to LMEM
+ */
+
+public class PackerKernel extends Kernel
+{
+
+	// TODO: pack data from multiple ports
+	protected PackerKernel( KernelParameters parameters, Types types )
+	{
+		super(parameters);
+		flush.disabled();
+
+		NonBlockingInput<DFEVector<DFEVar>> packedInput = io.nonBlockingInput("captureDatas", types.captureDatasType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
+
+		DFEStruct packed = types.captureDataPackedType.newPaddedInstance(this);
+		packed["captureDatas"] <== packedInput.data;
+
+		io.output("captureDataPacked", packed, packed.getType(), packedInput.valid);
+	}
+
+}

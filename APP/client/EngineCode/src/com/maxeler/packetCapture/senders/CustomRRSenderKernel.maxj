@@ -1,0 +1,83 @@
+package com.maxeler.packetCapture.senders;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.maxcompiler.v2.utils.Bits;
+import com.maxeler.maxcompiler.v2.utils.MathUtils;
+import com.maxeler.networking.v1.kernel_types.TCPType;
+import com.maxeler.packetCapture.types.Types;
+
+/**
+ * A sender kernel which classifies traffic into two types. The first type is ethernet frames with
+ * a broadcast destination address. The second type is all other traffic. Each type of traffic is
+ * sent in a round robin fashion to their respective server pool.
+ */
+public class CustomRRSenderKernel extends PacketSenderKernel
+{
+	private final int SOCKET_LEN_MAX = 2;
+
+	public CustomRRSenderKernel( KernelParameters parameters, Types types )
+	{
+		super(parameters, types);
+	}
+
+	@Override
+	public DFEVar getPacketSocket( DFEVar packetEnable, DFEStruct frame )
+	{
+		DFEVar type = getPacketType(frame);
+
+		DFEVar sockets[] = new DFEVar[2];
+		sockets[0] = getRRSocket("A", packetEnable & type === 0);
+		sockets[1] = getRRSocket("B", packetEnable & type === 1);
+		DFEVar socket = control.mux(type, sockets);
+
+		packetEnable.simWatch("packetEnable");
+
+		return socket;
+	}
+
+	public DFEVar getRRSocket( String type, DFEVar rrEnable )
+	{
+		DFEType socketLenType = dfeUInt(MathUtils.bitsToRepresent(SOCKET_LEN_MAX));
+		DFEVar socketsLen = io.scalarInput("sockets" + type + "Len", socketLenType);
+
+		socketsLen.simWatch("socketsLen_" + type );
+
+		DFEVar[] sockets = new DFEVar[SOCKET_LEN_MAX];
+		for( int i=0; i<sockets.length; i++ )
+		{
+			String name = "socket" + type + i;
+			sockets[i] = io.scalarInput(name, SOCKET_TYPE);
+		}
+
+		Counter counter = control.count.makeCounter(control.count.makeParams(MathUtils.bitsToAddress(SOCKET_LEN_MAX)).withMax(socketsLen).withEnable(rrEnable));
+		DFEVar index = counter.getCount();
+
+		DFEVar socket = control.mux(index, sockets);
+
+		return socket;
+	}
+
+	public DFEVar getPacketType( DFEStruct frame )
+	{
+		final DFEType destType = dfeRawBits(6 * 8);
+		final DFEVar destTarget = constant.var(destType, new Bits(destType.getTotalBits(), "ffffffffffff"));
+
+		// frame is valid when packetEnable is valid
+		// when a valid start frame is seen we know all frames preceding to the eof frame will be valid
+		// therefore stream offsets are ok to use here on frame when packetEnable is true
+		// when packetEnable is true this is a start frame
+
+		DFEStruct destFrame = stream.offset(frame, 1);
+		DFEVar dest = ((DFEVar) destFrame[TCPType.DATA]).slice(0, destType.getTotalBits());
+
+		dest.simWatch("dest");
+
+		DFEVar isTypeA = dest === destTarget;
+
+		return isTypeA === 0;
+	}
+}

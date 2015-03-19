@@ -1,0 +1,39 @@
+package com.maxeler.packetCapture;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.DelimiterMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.networking.types.EthernetRXType;
+import com.maxeler.packetCapture.types.CaptureDataType;
+import com.maxeler.packetCapture.types.TimeStampFormat;
+import com.maxeler.packetCapture.types.Types;
+
+/**
+ * Creates capture data from an Ethernet frame and time stamp
+ */
+class CaptureKernel extends Kernel
+{
+	CaptureKernel( KernelParameters parameters, Types types )
+	{
+		super(parameters);
+		this.flush.disabled();
+
+		EthernetRXType frameType = new EthernetRXType();
+		DFEStruct captureData = types.captureDataType.newInstance(this);
+
+		NonBlockingInput<DFEStruct> frameInput = io.nonBlockingInput("frame", frameType, constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
+		DFEStruct timestamp = io.input("timestamp", TimeStampFormat.INSTANCE);
+
+		frameInput.valid.simWatch("valid");
+		frameInput.data.simWatch("frame");
+		timestamp.simWatch("timestamp");
+
+		captureData[CaptureDataType.FRAME] <== frameInput.data;
+		captureData[CaptureDataType.TIMESTAMP] <== timestamp;
+
+		io.output("captureData", captureData, captureData.getType(), frameInput.valid);
+	}
+}

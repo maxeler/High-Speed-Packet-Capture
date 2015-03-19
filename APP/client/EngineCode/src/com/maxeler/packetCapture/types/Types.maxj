@@ -1,0 +1,51 @@
+package com.maxeler.packetCapture.types;
+
+import static com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType.sft;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFETypeFactory;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+
+public class Types
+{
+	public final CaptureDataType captureDataType;
+	public final DFEType captureDataRawType;
+	public final DFEPaddedStructType captureDataPaddedType;
+	public final DFEVectorType<DFEVar>captureDatasType;
+	public final DFEPaddedStructType captureDataPackedType;
+
+	public Types( int lmemWriteBits, int cpuWriteBits )
+	{
+		captureDataType = CaptureDataType.INSTANCE;
+		int captureDataBits = captureDataType.getTotalBits();
+
+		int captureDataPaddedBits = cpuWriteBits;
+		int captureDataPadBits = captureDataPaddedBits - captureDataBits;
+
+		int captureDatasLen = lmemWriteBits / captureDataBits;
+		int captureDataPackedBits = lmemWriteBits;
+		int captureDataPackedPadBits = captureDataPackedBits % captureDataBits;
+
+		report("captureDataBits = " + captureDataBits + "b");
+		report("captureDataPadBits = " + captureDataPadBits + "b");
+		report("captureDataPaddedBits = " + captureDataPaddedBits + "b");
+		report("captureDatasLen = " + captureDatasLen);
+		report("captureDatasBits = " + (captureDatasLen * captureDataBits) + "b");
+		report("captureDataPackedPadBits = " + captureDataPackedPadBits + "b");
+		report("captureDataPackedBits = " + captureDataPackedBits + "b");
+
+		// datum
+		captureDataRawType = DFETypeFactory.dfeRawBits(captureDataType.getTotalBits());
+		captureDataPaddedType = new DFEPaddedStructType(captureDataPadBits, sft("captureData", captureDataType));
+
+		// data
+		captureDatasType = new DFEVectorType<DFEVar>(captureDataRawType, captureDatasLen);
+		captureDataPackedType = new DFEPaddedStructType(captureDataPackedPadBits, sft("captureDatas", captureDatasType));
+	}
+
+	private static void report( String msg )
+	{
+		System.out.println("Types: " + msg);
+	}
+}

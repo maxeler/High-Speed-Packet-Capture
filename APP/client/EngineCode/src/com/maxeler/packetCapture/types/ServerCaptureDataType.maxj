@@ -1,0 +1,66 @@
+package com.maxeler.packetCapture.types;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFETypeFactory;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType;
+import com.maxeler.networking.types.EthernetRXType;
+
+public class ServerCaptureDataType extends DFEStructType
+{
+	public static final String TIMESTAMP_DOUBT = "TIMESTAMP_DOUBT";
+	public static final String TIMESTAMP_VALID = "TIMESTAMP_VALID";
+	public static final String TIMESTAMP_VALUE = "TIMESTAMP_VALUE";
+	public static final String FRAME_SOF = "FRAME_SOF";
+	public static final String FRAME_EOF = "FRAME_EOF";
+	public static final String FRAME_MOD = "FRAME_MOD";
+	public static final String FRAME_DATA = "FRAME_DATA";
+	public static final String PAD = "__PAD";
+
+	private static final EthernetRXType frameType = new EthernetRXType();
+	private static final DFEType padType = DFETypeFactory.dfeRawBits(1); // byte align
+
+	public static final ServerCaptureDataType INSTANCE = new ServerCaptureDataType();
+
+	public ServerCaptureDataType( )
+	{
+		super(sft(TIMESTAMP_DOUBT, TimeStampFormat.INSTANCE.getTypeForField(TimeStampFormat.DOUBT)),
+			  sft(TIMESTAMP_VALID, TimeStampFormat.INSTANCE.getTypeForField(TimeStampFormat.VALID)),
+			  sft(FRAME_SOF, frameType.getTypeForField(EthernetRXType.SOF)),
+			  sft(FRAME_EOF, frameType.getTypeForField(EthernetRXType.EOF)),
+			  sft(FRAME_MOD, frameType.getTypeForField(EthernetRXType.MOD)),
+			  sft(PAD, padType), // byte align
+			  sft(TIMESTAMP_VALUE, TimeStampFormat.INSTANCE.getTypeForField(TimeStampFormat.VALUE)),
+			  sft(FRAME_DATA, frameType.getTypeForField(EthernetRXType.DATA)));
+	}
+
+	public DFEStruct createFromCaptureData( DFEStruct captureData )
+	{
+		KernelLib design = captureData.getKernel();
+
+		DFEStruct data = this.newPaddedInstance(design);
+
+		DFEStruct timeStamp = captureData[CaptureDataType.TIMESTAMP];
+		data[TIMESTAMP_DOUBT] <== timeStamp[TimeStampFormat.DOUBT];
+		data[TIMESTAMP_VALID] <== timeStamp[TimeStampFormat.VALID];
+		data[TIMESTAMP_VALUE] <== timeStamp[TimeStampFormat.VALUE];
+
+		DFEStruct frame = captureData[CaptureDataType.FRAME];
+		data[FRAME_SOF] = frame[EthernetRXType.SOF];
+		data[FRAME_EOF] = frame[EthernetRXType.EOF];
+		data[FRAME_MOD] = frame[EthernetRXType.MOD];
+		data[FRAME_DATA] <== frame[EthernetRXType.DATA];
+
+		return data;
+	}
+
+	public DFEStruct newPaddedInstance( KernelLib design )
+	{
+		DFEStruct data = this.newInstance(design);
+
+		data[PAD] <== padType.newInstance(design, 0);
+
+		return data;
+	}
+}

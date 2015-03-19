@@ -1,0 +1,16 @@
+package com.maxeler.packetCapture.types;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType;
+
+public class CaptureDataType extends DFEStructType
+{
+	public static final CaptureDataType INSTANCE = new CaptureDataType();
+	public static final String TIMESTAMP = "TIMESTAMP";
+	public static final String FRAME = "FRAME";
+
+	CaptureDataType( )
+	{
+		super(sft(TIMESTAMP, TimeStampFormat.INSTANCE),
+			  sft(FRAME, new com.maxeler.networking.types.EthernetRXType()));
+	}
+}
