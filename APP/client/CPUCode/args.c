@@ -2,6 +2,7 @@
  * args.c
  */
 #include <string.h>
+#include <stdio.h>
 
 #include "args.h"
 
@@ -34,12 +35,22 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 		case 'v':
 		{
 			arguments->log_level = atoi(arg);
+
 			break;
 		}
 		case 'l':
 		{
+			const char* file_str = arg;
+
 			arguments->local_enabled = 1;
-			arguments->local_file = arg;
+
+			FILE* file = fopen(file_str, "w+");
+			if( file == NULL )
+			{
+				argp_error(state, "Unable to open file '%s' (errno=%d '%s').", file_str, errno, strerror(errno));
+			}
+			arguments->local_file = file;
+
 			break;
 		}
 		case 'r':
@@ -75,6 +86,8 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 				default:
 				{
 					argp_error(state, "Unknown remote server type: '%s'.", type_str);
+
+					break;
 				}
 			}
 
@@ -91,6 +104,7 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 			}
 
 			state->next = state->next++;
+
 			break;
 		}
 		case ARGP_KEY_ARG:
@@ -98,30 +112,37 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 			switch( state->arg_num )
 			{
 				case 0:
-				{
+				{ // dfe_ip
 					const char* ip_str = arg;
+
 					int status = inet_aton(ip_str, &arguments->dfe_ip);
 					if( status == 0 )
 					{
 						argp_error(state, "Unable to parse ip address '%s'.", ip_str);
 					}
+
 					break;
 				}
 				case 1:
-				{
+				{ // dfe_netmask
 					const char* ip_str = arg;
+
 					int status = inet_aton(ip_str, &arguments->dfe_netmask);
 					if( status == 0 )
 					{
-						argp_error(state, "Unable to parse netmask '%s'.", ip_str);
+						argp_error(state, "Unable to parse ip address '%s'.", ip_str);
 					}
+
 					break;
 				}
 				default:
-				{
+				{ // unknown
 					argp_usage(state);
+
+					break;
 				}
 			}
+
 			break;
 		}
 		case ARGP_KEY_END:
@@ -148,6 +169,8 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 		default:
 		{
 			return ARGP_ERR_UNKNOWN;
+
+			break;
 		}
 	}
 

@@ -81,17 +81,15 @@ int main( int argc, char** argv )
 	{ // local data transfer
 		log_info("Servicing DFE.\n");
 
-		FILE* file = fopen(arguments.local_file, "w+");
-
-		error = local_read_loop(engine, file);
+		error = local_read_loop(engine, arguments.local_file);
 		if( error )
 		{
 			fprintf(stderr, "Error: Unable to read local capture data\n");
 			return EXIT_FAILURE;
 		}
 
-		fclose(file);
-		file = NULL;
+		fclose(arguments.local_file);
+		arguments.local_file = NULL;
 	}
 	else
 	{ // hold onto card

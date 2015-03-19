@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <stdio.h>
 
 
 #ifndef ARGS_H_
@@ -35,7 +36,7 @@ typedef struct
 	int log_level;
 	struct in_addr dfe_ip;
 	struct in_addr dfe_netmask;
-	char* local_file;
+	FILE* local_file;
 
 	int ipsA_len;
 	int ipsB_len;

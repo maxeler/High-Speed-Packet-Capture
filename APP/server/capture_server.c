@@ -20,10 +20,12 @@
 #include <math.h>
 #include <signal.h>
 #include <sys/select.h>
+#include <argp.h>
 
 #include "pcap.h"
 #include "log.h"
 #include "capture_data.h"
+#include "args.h"
 
 
 enum read_mode_e
@@ -61,6 +63,12 @@ int main( int argc, char* argv[] )
 {
 	int error;
 
+	arguments_t arguments;
+	arguments.capture_file = NULL;
+	arguments.log_level = LOG_LEVEL_INFO;
+
+	argp_parse(&argp, argc, argv, 0, 0, &arguments);
+
 	// parse args
 	// TODO: parse safely/properly
 	if( argc != 3 )
@@ -69,15 +77,12 @@ int main( int argc, char* argv[] )
 		return EXIT_FAILURE;
 	}
 
-	const char* ip = argv[1];
-	const char* filePath = argv[2];
-
-	g_log_prepend = ip;
-	g_log_level = LOG_LEVEL_TRACE;
+	char* server_ip_str = strdup(inet_ntoa(arguments.server_ip));
+	g_log_prepend = server_ip_str;
+	g_log_level = arguments.log_level;
 
 	// init pcap
-	FILE* file = fopen(filePath, "w+");
-	pcap_t* pcap = pcap_create(file, 0, 1, 0, 65535);
+	pcap_t* pcap = pcap_create(arguments.capture_file, 0, 1, 0, 65535);
 	assert(pcap != NULL);
 
 	// setup socket
@@ -99,12 +104,7 @@ int main( int argc, char* argv[] )
 	struct sockaddr_in addr = {0};
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(PORT);
-	int status = inet_aton(ip, &addr.sin_addr);
-	if( status == 0 )
-	{
-		fprintf(stderr, "inet_aton: invalid address (%s)\n", ip);
-		return EXIT_FAILURE;
-	}
+	addr.sin_addr = arguments.server_ip;
 
 	error = bind(sock_num, (const struct sockaddr*) &addr, sizeof(addr));
 	if( error )
@@ -150,8 +150,10 @@ int main( int argc, char* argv[] )
 
 	// cleanup
 	pcap_flush(pcap);
-	fclose(file);
-	file = NULL;
+	fclose(arguments.capture_file);
+	arguments.capture_file = NULL;
+	free(server_ip_str);
+	server_ip_str = NULL;
 
 	return EXIT_SUCCESS;
 }
