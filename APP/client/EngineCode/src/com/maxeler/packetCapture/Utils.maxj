@@ -1,0 +1,33 @@
+package com.maxeler.packetCapture;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFETypeFactory;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+public class Utils
+{
+	public static DFEVar zeroRight( DFEVar item, int bits )
+	{
+		int padBits = bits - item.getType().getTotalBits();
+		if( padBits == 0 )
+		{
+			return item;
+		}
+		else // padBits > 0
+		{
+			return item.cat(DFETypeFactory.dfeRawBits(padBits).newInstance(item.getKernel(), 0));
+		}
+	}
+
+	public static DFEVar zeroLeft( DFEVar item, int bits )
+	{
+		int padBits = bits - item.getType().getTotalBits();
+		if( padBits == 0 )
+		{
+			return item;
+		}
+		else // padBits > 0
+		{
+			return DFETypeFactory.dfeRawBits(padBits).newInstance(item.getKernel(), 0).cat(item);
+		}
+	}
+}

@@ -1,0 +1,17 @@
+# --- User's custom definitions
+
+# ---
+
+MAXCOMPILER_QUOTE   := $(shell printf %q "$(MAXCOMPILERDIR)")
+
+RUNRULE_ARGS        := 5.5.5.2 255.255.255.0 -l capture.pcap -rA 5.5.5.3 -rA 5.5.5.4 -rB 5.5.5.5
+RUNRULE_RUNENV      := LD_LIBRARY_PATH="$(MAXELEROSDIR)/lib:$(LD_LIBRARY_PATH)" 
+RUNRULE_MAXFILES    := PacketCaptureClient.max  
+RUNRULE_MAXFILES_H  := PacketCaptureClient.h 
+RUNRULE_CFLAGS      := 
+RUNRULE_LDFLAGS     := 
+
+TARGET_EXEC         := PacketCaptureClient
+TARGET_LIBRARY      := 
+
+

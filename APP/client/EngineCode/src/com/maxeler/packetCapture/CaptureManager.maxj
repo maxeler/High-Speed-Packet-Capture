@@ -1,0 +1,185 @@
+package com.maxeler.packetCapture;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.Fanout;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.StateMachineBlock;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MemoryControlGroup;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParamArray;
+import com.maxeler.networking.statemachines.superfifo.DDRFifo;
+import com.maxeler.networking.statemachines.superfifo.SimpleWire;
+import com.maxeler.networking.v1.managers.NetworkManager;
+import com.maxeler.networking.v1.managers.netlib.EthernetChecksumMode;
+import com.maxeler.networking.v1.managers.netlib.EthernetStream;
+import com.maxeler.networking.v1.managers.netlib.Max4NetworkConnection;
+import com.maxeler.networking.v1.managers.netlib.TCPStream;
+import com.maxeler.networking.v1.managers.netlib.TimestampFormat;
+import com.maxeler.networking.v1.managers.netlib.TimestampSource;
+import com.maxeler.packetCapture.senders.CustomRRSenderKernel;
+import com.maxeler.packetCapture.types.Types;
+
+
+public class CaptureManager extends NetworkManager
+{
+	private static final int BURST_BITS = 192;
+	private static final int SERVER_COUNT_MAX = 2;
+	private static final long FIFO_START = 0;
+	private static final long FIFO_DEPTH = 16 * 1024 * 1024;
+
+	// TODO: write to maxfile constant
+	private static final Max4NetworkConnection CAPTURE_IF = Max4NetworkConnection.QSFP_TOP_10G_PORT1;
+	private static final Max4NetworkConnection SERVER_IF = Max4NetworkConnection.QSFP_TOP_10G_PORT2;
+
+	// TODO: write to maxfile constant
+	private static final int TIME_PRECISION = 8;
+
+	public static void main( String[] args )
+	{
+		// "word size" which capture data will be padded up to when written to LMEM.
+		// note: must be a multiple of memory controller burst size
+		int lmemWriteBits = BURST_BITS * 2;
+		// "word size" which capture data will be padded up to when transfered from DFE to CPU
+		// note: convenient if multiple of a byte
+		int cpuWriteBits = 256;
+		// various types of the capture data
+		Types types = new Types(lmemWriteBits, cpuWriteBits);
+
+		EngineParameters params = new EngineParameters(args);
+		CaptureManager manager = new CaptureManager(params, types);
+
+		// max constants
+		manager.addMaxFileStringConstant("server_if_name", SERVER_IF.name());
+
+		// create CPU interfaces
+		manager.createSLiCinterface(createRemoteInterface(SERVER_COUNT_MAX));
+		manager.createSLiCinterface(createLocalInterface(types));
+
+		manager.debug.setDebugLevel(new DebugLevel(){{this.setHasStreamStatus(true);}});
+
+		manager.build();
+	}
+
+	public CaptureManager( EngineParameters params, Types types )
+	{
+		super(params);
+
+		// create capture input
+		EthernetStream capturePort = addEthernetStream("dataIn", CAPTURE_IF, EthernetChecksumMode.DropBadFrames);
+
+		// create lmem buffer
+		StateMachineBlock wire = addStateMachine("cmdWire", new SimpleWire(this, 64));
+
+		getManagerConfiguration().dram.setEnableFlagCommands(true);
+
+		MemoryControlGroup ctrlGroup = addMemoryControlGroup("ctrlGroup", wire.getOutput(SimpleWire.OUTPUT));
+		DFELink writeMemStream = addStreamToOnCardMemory("writeMemStream", ctrlGroup);
+		DFELink readMemStream = addStreamFromOnCardMemory("readMemStream", ctrlGroup);
+		ctrlGroup.finalise();
+
+		StateMachineBlock io = addStateMachine("ddrFifo", new DDRFifo(this, FIFO_START, FIFO_DEPTH,
+				ctrlGroup.getStreamIndexIdWithinGroup("writeMemStream"),
+				ctrlGroup.getStreamIndexIdWithinGroup("readMemStream"),
+				0, 1));
+
+		wire.getInput(SimpleWire.INPUT) <== io.getOutput(DDRFifo.OUTPUT_MEM_COMMAND);
+
+		writeMemStream <== io.getOutput(DDRFifo.OUTPUT_MEM_DATA);
+		io.getInput(DDRFifo.INPUT_MEM_DATA) <== readMemStream;
+
+		// create local stream
+		DFELink toCpu = addStreamToCPU("toCpu");
+
+		// create network stream
+		TCPStream serverStream = addTCPStream("serverStream", SERVER_IF);
+
+		// create time stamp stream
+		this.pushTimestampSource(TimestampSource.HOST_CLOCK);
+		DFELink timeStampStream = addTimestampStream("timestampStream", TimestampFormat.COUNT, TIME_PRECISION);
+		this.popTimestampSource();
+
+		// create kernels
+		KernelBlock captureK = addKernel(new CaptureKernel(makeKernelParameters("CaptureKernel"), types));
+		KernelBlock packerK = addKernel(new PackerKernel(makeKernelParameters("CapturePackerKernel"), types));
+		KernelBlock unpackerK = addKernel(new UnpackerKernel(makeKernelParameters("CaptureUnpackerKernel"), types));
+		KernelBlock senderK = addKernel(new CustomRRSenderKernel(makeKernelParameters("SenderK"), types));
+		KernelBlock cpuFormatterK = addKernel(new CpuFormatterKernel(makeKernelParameters("CpuFormatterKernel"), types));
+
+		// connect
+		captureK.getInput("timestamp") <== timeStampStream;
+		captureK.getInput("frame") <== capturePort.getReceiveStream();
+		packerK.getInput("captureDatas") <== captureK.getOutput("captureData");
+		io.getInput(DDRFifo.INPUT_DATA) <== packerK.getOutput("captureDataPacked");
+
+		unpackerK.getInput("captureDataPacked") <== io.getOutput(DDRFifo.OUTPUT_DATA);
+
+		Fanout fan = fanout("fan");
+		fan.getInput() <== unpackerK.getOutput("captureDatas");
+
+		senderK.getInput("captureData") <== fan.addOutput("server");
+		serverStream.getTransmitStream() <== senderK.getOutput("frame");
+
+		cpuFormatterK.getInput("captureData") <== fan.addOutput("cpu");
+		toCpu <== cpuFormatterK.getOutput("cpuCaptureData");
+	}
+
+	public static EngineInterface createRemoteInterface( int serverCountMax )
+	{
+		EngineInterface ei = new EngineInterface("enableRemoteCapture");
+
+		InterfaceParam socketsALen = ei.addParam("socketsALen", CPUTypes.UINT8);
+		InterfaceParamArray socketsA = ei.addParamArray("socketsA", CPUTypes.UINT8);
+		socketsA.setMaxSize(serverCountMax);
+		InterfaceParam socketsBLen = ei.addParam("socketsBLen", CPUTypes.UINT8);
+		InterfaceParamArray socketsB = ei.addParamArray("socketsB", CPUTypes.UINT8);
+		socketsB.setMaxSize(serverCountMax);
+
+		ei.setScalar("SenderK", "socketsALen", socketsALen);
+		ei.setScalar("SenderK", "socketsBLen", socketsBLen);
+
+		// set pool A sockets
+		for( int i=0; i<serverCountMax; i++ )
+		{
+			InterfaceParam socket = socketsA.get(i);
+			String name = "socketA" + i;
+			ei.setScalar("SenderK", name, socket);
+		}
+
+		// set pool B sockets
+		for( int i=0; i<serverCountMax; i++ )
+		{
+			InterfaceParam socket = socketsB.get(i);
+			String name = "socketB" + i;
+			ei.setScalar("SenderK", name, socket);
+		}
+
+		// enable routing of capture data to server
+		ei.route("fan -> server");
+
+		ei.ignoreAll(Direction.IN_OUT);
+
+		return ei;
+	}
+
+	public static EngineInterface createLocalInterface( Types types )
+	{
+		EngineInterface ei = new EngineInterface("readCaptureData");
+
+		InterfaceParam len = ei.addParam("len", CPUTypes.UINT64);
+		InterfaceParam size = len * (types.captureDataPaddedType.getTotalBits() / 8);
+
+		ei.setStream("toCpu", CPUTypes.UINT64, size);
+
+		// enable routing of capture data to CPU
+		ei.route("fan -> cpu");
+
+		ei.ignoreAll(Direction.IN_OUT);
+
+		return ei;
+	}
+}

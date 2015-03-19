@@ -1,0 +1,5 @@
+#
+# This file is managed by MaxIDE. Do NOT change.
+#
+HEADERS:= args.h capture_data.h utils.h 
+SOURCES:= PacketCaptureClient.c args.c capture_data.c utils.c 

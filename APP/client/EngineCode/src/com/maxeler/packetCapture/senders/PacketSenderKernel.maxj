@@ -1,0 +1,128 @@
+package com.maxeler.packetCapture.senders;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.Reductions;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType;
+import com.maxeler.maxcompiler.v2.utils.MathUtils;
+import com.maxeler.networking.types.EthernetRXType;
+import com.maxeler.networking.v1.kernel_types.TCPType;
+import com.maxeler.packetCapture.Utils;
+import com.maxeler.packetCapture.types.CaptureDataType;
+import com.maxeler.packetCapture.types.ServerCaptureDataType;
+import com.maxeler.packetCapture.types.Types;
+
+public abstract class PacketSenderKernel extends Kernel
+{
+	DFEType SOCKET_TYPE = dfeUInt(8);
+
+	public PacketSenderKernel( KernelParameters parameters, final Types types )
+	{
+		super(parameters);
+		flush.disabled();
+
+		DFEStructType frameType = new TCPType().getDFEStructType();
+		DFEType frameModType = (DFEType) frameType.getTypeForField(TCPType.MOD);
+		DFEType frameDataType = (DFEType) frameType.getTypeForField(TCPType.DATA);
+
+		// TODO: implement with non-blocking inputs
+		DFEVar readNextFrame = dfeBool().newInstance(this);
+		DFEStruct captureData = io.input("captureData", types.captureDataType, readNextFrame);
+
+		int segmentBits = frameDataType.getTotalBits();
+		int segmentsLen = (int) Math.ceil(ServerCaptureDataType.INSTANCE.getTotalBits() / (segmentBits * 1.0));
+		int lastSegmentSize = (ServerCaptureDataType.INSTANCE.getTotalBits() % 64) / 8;
+		Counter segmentCounter = control.count.makeCounter(control.count.makeParams(MathUtils.bitsToRepresent(segmentsLen)).withMax(segmentsLen));
+		DFEVar segmentIndex = segmentCounter.getCount();
+
+		readNextFrame <== segmentIndex === 0;
+
+		// socket
+		DFEStruct captureFrame = captureData[CaptureDataType.FRAME];
+		DFEVar captureFrameMod = captureFrame[EthernetRXType.MOD];
+		DFEVar readNextSocket = ((DFEVar) (captureFrame[TCPType.SOF]) === 1) & readNextFrame;
+		DFEVar socket = getFrameSocket(readNextSocket, captureFrame);
+
+		// send
+		// TODO: pack data into maximum tcp payload size for efficient data transfer
+		DFEStruct data = ServerCaptureDataType.INSTANCE.createFromCaptureData(captureData);
+		DFEVar isFirstSegment = segmentIndex === 0;
+		DFEVar lastSegmentIndex = captureFrameMod === 0 ? segmentIndex.getType().newInstance(this, (segmentsLen - 1)) : segmentIndex.getType().newInstance(this, (segmentsLen - 2));
+		DFEVar isLastSegment = segmentIndex === lastSegmentIndex;
+		DFEVar lastSegmentMod = captureFrameMod === 0 ? 1 : (captureFrameMod === 7 ? 0 : captureFrameMod + 1);
+		DFEVar sendEnable = segmentIndex <= lastSegmentIndex;
+
+		DFEStruct frame = frameType.newInstance(this);
+		frame[TCPType.SOF] <== isFirstSegment;
+		frame[TCPType.EOF] <== isLastSegment;
+		frame[TCPType.MOD] <== isLastSegment ? lastSegmentMod : frameModType.newInstance(this, 0);
+		frame[TCPType.DATA] <== getPart(data.pack(), segmentBits, segmentIndex);
+		frame[TCPType.SOCKET] <== socket;
+
+		io.output("frame", frame, frame.getType(), sendEnable);
+
+
+		segmentIndex.simWatch("segmentIndex");
+		isFirstSegment.simWatch("isFirstSegment");
+		isLastSegment.simWatch("isLastSegment");
+		readNextFrame.simWatch("readNextFrame");
+		readNextSocket.simWatch("readNextSocket");
+		socket.simWatch("socket");
+		captureData.simWatch("captureData");
+		frame.simWatch("frame");
+	}
+
+	private DFEVar getPart( DFEVar data, int partBits, DFEVar index )
+	{
+		int dataBits = data.getType().getTotalBits();
+		int partsLen = (int) Math.ceil(dataBits / (partBits * 1.0));
+		DFEVar[] parts = new DFEVar[partsLen];
+
+		if( partsLen == 1 )
+		{ // no need to slice/mux
+			return Utils.zeroLeft(data, partBits);
+		}
+
+		// 0..(n - 1)
+		int i = 0;
+		int base = 0;
+		while( i<parts.length - 1 )
+		{
+			parts[i] = data.slice(base, partBits);
+
+			i++;
+			base = i * partBits;
+		}
+
+		// n - 1
+		int mod = dataBits % partBits;
+		DFEVar lastPart;
+		if( mod == 0 )
+		{
+			lastPart = data.slice(base, partBits);
+		}
+		else // mod != 0
+		{ // pad up for mux
+			lastPart = Utils.zeroLeft(data.slice(base, mod), partBits);
+		}
+		parts[parts.length - 1] = lastPart;
+
+		return control.mux(index, parts);
+	}
+
+	DFEVar getFrameSocket( DFEVar frameEnable, DFEStruct frame )
+	{
+		// update socket on each new packet
+		DFEVar sof = (DFEVar) frame[TCPType.SOF] === 1;
+		DFEVar packetEnable = frameEnable & sof;
+		DFEVar socket = getPacketSocket(packetEnable, frame);
+		DFEVar packetSocket = Reductions.streamHold(socket, packetEnable);
+		return packetSocket;
+	}
+
+	public abstract DFEVar getPacketSocket( DFEVar packetEnable, DFEStruct frame );
+}
