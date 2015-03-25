@@ -71,8 +71,19 @@ void capture_data_free( capture_data_t* this )
 {
 	assert(this != NULL);
 
-	timestamp_free(this->timestamp);
-	frame_free(this->frame);
+	if( this->timestamp != NULL )
+	{
+		timestamp_free(this->timestamp);
+		this->timestamp = NULL;
+	}
+
+	if( this->frame != NULL )
+	{
+		frame_free(this->frame);
+		this->frame = NULL;
+	}
+
+	free(this);
 }
 
 timestamp_t* capture_data_get_timestamp( capture_data_t* this )

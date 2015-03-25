@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
 	<name>PacketCaptureClient_RunRules</name>
-	<comment>Simulation</comment>
+	<comment>SIMULATION</comment>
 	<manageMaxCompiler>false</manageMaxCompiler>
 	<manageMaxGenFD>false</manageMaxGenFD>
 	<manageMaxBlox>false</manageMaxBlox>

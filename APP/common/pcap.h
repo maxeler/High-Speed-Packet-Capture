@@ -17,7 +17,7 @@ typedef struct pcap_packet_s pcap_packet_t;
 
 typedef struct pcap_s pcap_t;
 
-pcap_t* pcap_create( FILE* file, int32_t  thiszone, uint32_t network, uint32_t sigfigs, uint32_t snaplen );
+pcap_t* pcap_init( FILE* file, int32_t  thiszone, uint32_t network, uint32_t sigfigs, uint32_t snaplen );
 
 pcap_packet_t* pcap_packet_init( pcap_t* pcap, uint32_t ts_sec, uint32_t ts_nsec );
 
@@ -28,5 +28,7 @@ int pcap_packet_write( pcap_t* pcap, pcap_packet_t* packet );
 int pcap_flush( pcap_t* pcap );
 
 void pcap_packet_free( pcap_packet_t* packet );
+
+void pcap_free( pcap_t* pcap );
 
 #endif /* PCAP_H_ */

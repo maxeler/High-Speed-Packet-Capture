@@ -22,7 +22,14 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 		}
 		case ARGP_KEY_ARG:
 		{
-			switch( state->arg_num )
+			int arg_num = state->arg_num;
+			if( state->argc == 2 )
+			{
+				// skip over ip arg parsing
+				arg_num++;
+			}
+
+			switch( arg_num )
 			{
 				case 0:
 				{ // ip
@@ -61,7 +68,8 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 		}
 		case ARGP_KEY_END:
 		{
-			if( state->arg_num < 2 )
+			if( (state->argc == 2 && state->arg_num < 1)
+				|| (state->argc == 3 && state->arg_num < 2) )
 			{
 				argp_usage(state);
 			}
@@ -81,7 +89,7 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 
 static char doc[] = "";
 
-static char args_doc[] = "ip file.pcap";
+static char args_doc[] = "[ip] file.pcap";
 
 static struct argp_option options[] = {
 	{

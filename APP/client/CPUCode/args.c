@@ -147,21 +147,23 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 		}
 		case ARGP_KEY_END:
 		{
-			if( state->arg_num < 2 )
-			{
-				argp_usage(state);
-			}
-
 			if( arguments->local_enabled == 0 &&
 				arguments->remote_enabled == 0 )
 			{
 				argp_error(state, "At least one type of capture mode must be configured.");
 			}
 
-			if( arguments->ipsA_len == 0
-				|| arguments->ipsB_len == 0 )
+			if( arguments->remote_enabled )
 			{
-				argp_error(state, "At least one server must be configured for each server type.");
+				if( state->arg_num < 2 )
+				{
+					argp_usage(state);
+				}
+
+				if( arguments->ipsA_len == 0 || arguments->ipsB_len == 0 )
+				{
+					argp_error(state, "At least one server must be configured for each server type.");
+				}
 			}
 
 			break;
@@ -179,7 +181,7 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 
 static char doc[] = "";
 
-static char args_doc[] = "dfe-ip dfe-netmask";
+static char args_doc[] = "[dfe-ip dfe-netmask]";
 
 static struct argp_option options[] = {
 	{
@@ -194,14 +196,14 @@ static struct argp_option options[] = {
 		.key = 'l',
 		.arg = "pcap-file",
 		.flags = 0,
-		.doc = "Enable local write capture mode",
+		.doc = "Enable local write mode",
 	},
 	{
 		.name = "remote",
 		.key = 'r',
 		.arg = "type ip",
 		.flags = 0,
-		.doc = "Enable remote write capture mode",
+		.doc = "Enable remote write mode",
 	},
 
 	{0}

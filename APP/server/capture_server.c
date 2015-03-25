@@ -34,6 +34,12 @@ enum read_mode_e
 	READ_MODE_DATA,
 };
 
+
+static int PCAP_TZONE = PCAP_TZONE_UTC;
+static int PCAP_SIGFIGS = 0;
+static int PCAP_NETWORK = PCAP_NETWORK_ETHERNET;
+static int PCAP_SNAPLEN = 65535;
+
 static const int PORT = 2511;
 static const int NUM_CONECTIONS = 1;
 static const int HEADER_SIZE = 1;
@@ -51,11 +57,9 @@ void parse_header( capture_data_t* data, uint64_t buffer[1] );
 
 void parse_data( capture_data_t* data, uint64_t buffer[1] );
 
-void process_capture_data( pcap_t* pcap, capture_data_t* data );
-
 static int handle_client( pcap_t* pcap, int conh );
 
-static int read_data( int fd, uint64_t* buffer, ssize_t read_size );
+static int read_data( int fd, void* buffer, ssize_t read_size );
 
 static void print_data( uint8_t* buffer, ssize_t buffer_size );
 
@@ -66,23 +70,16 @@ int main( int argc, char* argv[] )
 	arguments_t arguments;
 	arguments.capture_file = NULL;
 	arguments.log_level = LOG_LEVEL_INFO;
+	inet_aton("0.0.0.0", &arguments.server_ip);
 
 	argp_parse(&argp, argc, argv, 0, 0, &arguments);
-
-	// parse args
-	// TODO: parse safely/properly
-	if( argc != 3 )
-	{
-		fprintf(stderr, "%s: ip file.pcap\n", argv[0]);
-		return EXIT_FAILURE;
-	}
 
 	char* server_ip_str = strdup(inet_ntoa(arguments.server_ip));
 	g_log_prepend = server_ip_str;
 	g_log_level = arguments.log_level;
 
 	// init pcap
-	pcap_t* pcap = pcap_create(arguments.capture_file, 0, 1, 0, 65535);
+	pcap_t* pcap = pcap_init(arguments.capture_file, PCAP_TZONE, PCAP_NETWORK, PCAP_SIGFIGS, PCAP_SNAPLEN);
 	assert(pcap != NULL);
 
 	// setup socket
@@ -138,7 +135,7 @@ int main( int argc, char* argv[] )
 			char client_ip[INET_ADDRSTRLEN];
 			inet_ntop(AF_INET, &(client_addr.sin_addr), client_ip, INET_ADDRSTRLEN);
 			const int client_port = ntohs(client_addr.sin_port);
-			logf_info("Client connected %s: %d.\n", client_ip, client_port);
+			logf_info("Client connected from %s: %d.\n", client_ip, client_port);
 
 			int error = handle_client(pcap, con_fd);
 			if( error )
@@ -150,6 +147,8 @@ int main( int argc, char* argv[] )
 
 	// cleanup
 	pcap_flush(pcap);
+	pcap_free(pcap);
+	pcap = NULL;
 	fclose(arguments.capture_file);
 	arguments.capture_file = NULL;
 	free(server_ip_str);
@@ -176,11 +175,14 @@ static int handle_client( pcap_t* pcap, int con_fd )
 	// register signal handler
 	struct sigaction exit_action;
 	exit_action.sa_handler = handle_exit;
+	exit_action.sa_flags = 0;
 	sigemptyset(&exit_action.sa_mask);
 	sigaction(SIGINT, &exit_action, NULL);
 	sigaction(SIGTERM, &exit_action, NULL);
 
 	// service socket
+	pcap_packet_t* packet = NULL;
+	static int sof_expected = 1;
 	while( 1 )
 	{
 		memset(buffer, 0, buffer_size);
@@ -230,7 +232,33 @@ static int handle_client( pcap_t* pcap, int con_fd )
 			{
 				// process
 				parse_data(&capture_data, buffer);
-				process_capture_data(pcap, &capture_data);
+
+				frame_t* frame = capture_data.frame;
+				timestamp_t* timestamp = capture_data.timestamp;
+
+				// sof
+				assert(sof_expected == frame->sof);
+				if( frame->sof )
+				{
+					packet = pcap_packet_init(pcap, timestamp_get_seconds(timestamp), timestamp_get_nanoseconds(timestamp));
+					assert(packet != NULL);
+
+					sof_expected = 0;
+				}
+
+				// append
+				pcap_packet_append(packet, frame_get_data(frame), frame_get_size(frame));
+
+				// eof
+				if( frame->eof )
+				{
+					pcap_packet_write(pcap, packet);
+					pcap_flush(pcap);
+					pcap_packet_free(packet);
+					packet = NULL;
+
+					sof_expected = 1;
+				}
 
 				// config next mode
 				read_mode = READ_MODE_HEADER;
@@ -242,14 +270,22 @@ static int handle_client( pcap_t* pcap, int con_fd )
 	}
 
 	// cleanup
+	pcap_flush(pcap);
+	if( packet != NULL )
+	{
+		pcap_packet_free(packet);
+		packet = NULL;
+	}
+	packet = NULL;
 	free(buffer);
 	buffer = NULL;
 
 	return 0;
 }
 
-static int read_data( int fd, uint64_t* buffer, ssize_t read_size )
+static int read_data( int fd, void* buffer, ssize_t read_size )
 {
+	uint8_t* buffer8 = (uint8_t*) buffer;
 	ssize_t nbytes = 0;
 	while( (nbytes < read_size) && !g_shutdown )
 	{
@@ -285,7 +321,7 @@ static int read_data( int fd, uint64_t* buffer, ssize_t read_size )
 		}
 		else // status == 1
 		{ // read ready
-			nbytes += read(fd, (buffer + nbytes), (read_size - nbytes));
+			nbytes += read(fd, (buffer8 + nbytes), (read_size - nbytes));
 
 			if( nbytes == -1 )
 			{ // error
@@ -360,42 +396,6 @@ void parse_data( capture_data_t* data, uint64_t buffer[1] )
 				frame->data);
 }
 
-void process_capture_data( pcap_t* pcap, capture_data_t* data )
-{
-	assert(pcap != NULL);
-	assert(data != NULL);
-
-	static pcap_packet_t* packet = NULL;
-	static int sof_expected = 1;
-
-	frame_t* frame = data->frame;
-	timestamp_t* timestamp = data->timestamp;
-
-	// sof
-	assert(sof_expected == frame->sof);
-	if( frame->sof )
-	{
-		packet = pcap_packet_init(pcap, timestamp_get_seconds(timestamp), timestamp_get_nanoseconds(timestamp));
-		assert(packet != NULL);
-
-		sof_expected = 0;
-	}
-
-	// append
-	pcap_packet_append(packet, frame_get_data(frame), frame_get_size(frame));
-
-	// eof
-	if( frame->eof )
-	{
-		pcap_packet_write(pcap, packet);
-		pcap_flush(pcap);
-		pcap_packet_free(packet);
-		packet = NULL;
-
-		sof_expected = 1;
-	}
-}
-
 void handle_exit( int sig )
 {
 	(void) sig;
@@ -405,6 +405,7 @@ void handle_exit( int sig )
 	// restore original handler
 	struct sigaction sigint_act;
 	sigint_act.sa_handler = SIG_DFL;
+	sigint_act.sa_flags = 0;
 	sigemptyset(&sigint_act.sa_mask);
 	sigaction(SIGINT, &sigint_act, NULL);
 	sigaction(SIGTERM, &sigint_act, NULL);
