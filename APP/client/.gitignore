@@ -1,0 +1,15 @@
+# generated dirs
+EngineCode/bin
+RunRules/*/maxfiles/
+RunRules/*/objects/
+RunRules/*/include/
+RunRules/*/dist/
+RunRules/*/binaries
+RunRules/*/debug
+
+# generated files
+RunRules/*/build.log
+RunRules/*/*.be
+EngineCode/.classpath
+
+CPUCode/*.pcap

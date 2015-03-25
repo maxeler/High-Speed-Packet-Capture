@@ -67,20 +67,7 @@ static int frame_data_write( const uint64_t* data, ssize_t size, FILE* file )
 	return 0;
 }
 
-pcap_t* pcap_init( FILE* file, globalh_t* header )
-{
-	assert(file != NULL);
-
-	pcap_t* pcap = malloc(sizeof(*pcap));
-	assert(pcap != NULL);
-
-	pcap->header = header;
-	pcap->file = file;
-
-	return pcap;
-}
-
-pcap_t* pcap_create( FILE* file, int32_t  thiszone, uint32_t network, uint32_t sigfigs, uint32_t snaplen )
+pcap_t* pcap_init( FILE* file, int32_t  thiszone, uint32_t network, uint32_t sigfigs, uint32_t snaplen )
 {
 	assert(file != NULL);
 
@@ -97,7 +84,11 @@ pcap_t* pcap_create( FILE* file, int32_t  thiszone, uint32_t network, uint32_t s
 	header->snaplen = snaplen;
 
 	// pcap
-	pcap_t* pcap = pcap_init(file, header);
+	pcap_t* pcap = malloc(sizeof(*pcap));
+	assert(pcap != NULL);
+
+	pcap->header = header;
+	pcap->file = file;
 
 	// write global header
 	int error = globalh_write(header, file);
@@ -178,7 +169,29 @@ void pcap_packet_free( pcap_packet_t* packet )
 	if( packet->header != NULL )
 	{
 		free(packet->header);
+		packet->header = NULL;
 	}
 
-	free(packet->data);
+	if( packet->data != NULL )
+	{
+		free(packet->data);
+		packet->data = NULL;
+	}
+
+	free(packet);
+	packet = NULL;
+}
+
+void pcap_free( pcap_t* pcap )
+{
+	assert(pcap != NULL);
+
+	if( pcap->header != NULL )
+	{
+		free(pcap->header);
+		pcap->header = NULL;
+	}
+
+	free(pcap);
+	pcap = NULL;
 }
