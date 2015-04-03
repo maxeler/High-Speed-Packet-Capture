@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "args.h"
+#include "log.h"
 
 
 static error_t parse_opt( int key, char *arg, struct argp_state *state )
@@ -16,7 +17,13 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 	{
 		case 'v':
 		{
-			arguments->log_level = atoi(arg);
+			int level = log_level_from_str(arg);
+			if( level == -1 )
+			{
+				argp_error(state, "Invalid level '%s'\n", arg);
+			}
+
+			arguments->log_level = level;
 
 			break;
 		}
