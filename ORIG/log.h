@@ -1,6 +1,5 @@
 /*
  * log.h
- *
  */
 
 #ifndef LOG_H_
