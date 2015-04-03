@@ -57,8 +57,8 @@ int main( int argc, char** argv )
 	argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
 	char* dfe_ip_str = strdup(inet_ntoa(arguments.dfe_ip));
-	g_log_prepend = dfe_ip_str;
-	g_log_level = arguments.log_level;
+	log_prepend_set(dfe_ip_str);
+	log_level_set(arguments.log_level);
 
 	// load bitstream onto DFE
 	log_info("Loading bitstream.\n");
@@ -210,7 +210,7 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 		PacketCapture_readCaptureData_run(engine, &action);
 
 		// debug print data
-		if( g_log_level >= LOG_LEVEL_TRACE )
+		if( log_level_active(LOG_LEVEL_TRACE) )
 		{
 			size_t data_len = data_size / sizeof(*data);
 			char str[BUFSIZ];
