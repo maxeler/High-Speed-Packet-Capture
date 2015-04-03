@@ -32,7 +32,7 @@ void print_packet( const void* _data, size_t len )
 {
 	const uint8_t* data = (const uint8_t*) _data;
 
-	printf("Packet (%ldB): ", len);
+	printf("Packet (%zdB): ", len);
 	for( size_t i=0; i<len; i++ )
 	{
 		if( i != 0 )
@@ -123,7 +123,7 @@ int main( int argc, char** argv )
 			print_packet(data, header->caplen);
 		}
 
-		logf_info("Captured %ld packets.\n", packets_count);
+		logf_info("Captured %zd packets.\n", packets_count);
 
 		pcap_dump((u_char*) pdump, header, data);
 	}
