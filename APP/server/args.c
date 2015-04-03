@@ -68,8 +68,7 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 		}
 		case ARGP_KEY_END:
 		{
-			if( (state->argc == 2 && state->arg_num < 1)
-				|| (state->argc == 3 && state->arg_num < 2) )
+			if( state->arg_num < 1 || state->arg_num > 2 )
 			{
 				argp_usage(state);
 			}
