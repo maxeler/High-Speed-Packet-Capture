@@ -91,16 +91,10 @@ static char doc[] = "";
 
 static char args_doc[] = "[ip] file.pcap";
 
-static struct argp_option options[] = {
-	{
-		.name = "verbose",
-		.key = 'v',
-		.arg = "level",
-		.flags = 0,
-		.doc = "",
-	},
-
+static struct argp_option options[] =
+{
+	{"verbose", 'v', "level", 0, "Set log level", 0},
 	{0}
 };
 
-struct argp argp = {options, parse_opt, args_doc, doc};
+struct argp argp = {options, parse_opt, args_doc, doc, 0, 0, 0};

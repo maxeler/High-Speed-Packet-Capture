@@ -70,7 +70,7 @@ static error_t parse_opt( int key, char* arg, struct argp_state* state )
 
 static struct argp_option options[] =
 {
-	{"verbose", 'v', "level", 0, "Set verbosity level", 0},
+	{"verbose", 'v', "level", 0, "Set log level", 0},
 	{0}
 };
 

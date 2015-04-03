@@ -183,31 +183,13 @@ static char doc[] = "";
 
 static char args_doc[] = "[dfe-ip dfe-netmask]";
 
-static struct argp_option options[] = {
-	{
-		.name = "verbose",
-		.key = 'v',
-		.arg = "level",
-		.flags = 0,
-		.doc = "",
-	},
-	{
-		.name = "local",
-		.key = 'l',
-		.arg = "pcap-file",
-		.flags = 0,
-		.doc = "Enable local write mode",
-	},
-	{
-		.name = "remote",
-		.key = 'r',
-		.arg = "type ip",
-		.flags = 0,
-		.doc = "Enable remote write mode",
-	},
-
+static struct argp_option options[] =
+{
+	{"verbose", 'v', "level", 0, "Set log level", 0},
+	{"local", 'l', "pcap-file", 0, "Enable local write mode", 0},
+	{"remote", 'r', "type ip", 0, "Enable remote write mode", 0},
 	{0}
 };
 
-struct argp argp = {options, parse_opt, args_doc, doc};
+struct argp argp = {options, parse_opt, args_doc, doc, 0, 0, 0};
 
