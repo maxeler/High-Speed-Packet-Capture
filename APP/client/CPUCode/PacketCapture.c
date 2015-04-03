@@ -194,7 +194,7 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 	// service
 	pcap_packet_t* packet = NULL;
 	int sof_expected = 1;
-	size_t total_packets = 0;
+	size_t packets_count = 0; // note: may overflow
 	while( !g_shutdown )
 	{
 		logf_debug("Reading %d frames (%dB)\n", frames_len, data_size);
@@ -245,7 +245,7 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 			logf_debug("frame.sof: %d\n", frame_get_sof(frame));
 			logf_debug("frame.eof: %d\n", frame_get_eof(frame));
 			logf_debug("frame.mod: %d\n", frame_get_mod(frame));
-			logf_debug("frame.size: %ld\n", frame_get_size(frame));
+			logf_debug("frame.size: %zd\n", frame_get_size(frame));
 			logf_debug("frame.data: 0x%016"PRIx64"\n", *frame_get_data(frame));
 
 			log_debug("\n");
@@ -298,8 +298,8 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 				packet = NULL;
 
 				sof_expected = 1;
-				total_packets++;
-				logf_info("Total packets: %ld\n", total_packets);
+				packets_count++;
+				logf_info("Total packets: %zd\n", packets_count);
 			}
 
 			frame_free(frame);
