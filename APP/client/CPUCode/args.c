@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "args.h"
+#include "log.h"
 
 
 static const char* SERVER_TYPE_A_STR = "A";
@@ -34,7 +35,13 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 	{
 		case 'v':
 		{
-			arguments->log_level = atoi(arg);
+			int level = log_level_from_str(arg);
+			if( level == -1 )
+			{
+				argp_error(state, "Invalid level '%s'\n", arg);
+			}
+
+			arguments->log_level = level;
 
 			break;
 		}
@@ -183,31 +190,13 @@ static char doc[] = "";
 
 static char args_doc[] = "[dfe-ip dfe-netmask]";
 
-static struct argp_option options[] = {
-	{
-		.name = "verbose",
-		.key = 'v',
-		.arg = "level",
-		.flags = 0,
-		.doc = "",
-	},
-	{
-		.name = "local",
-		.key = 'l',
-		.arg = "pcap-file",
-		.flags = 0,
-		.doc = "Enable local write mode",
-	},
-	{
-		.name = "remote",
-		.key = 'r',
-		.arg = "type ip",
-		.flags = 0,
-		.doc = "Enable remote write mode",
-	},
-
+static struct argp_option options[] =
+{
+	{"verbose", 'v', "level", 0, "Set log level", 0},
+	{"local", 'l', "pcap-file", 0, "Enable local write mode", 0},
+	{"remote", 'r', "type ip", 0, "Enable remote write mode", 0},
 	{0}
 };
 
-struct argp argp = {options, parse_opt, args_doc, doc};
+struct argp argp = {options, parse_opt, args_doc, doc, 0, 0, 0};
 
