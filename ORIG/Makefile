@@ -1,20 +1,29 @@
-NAME		= PacketCapture
-EXEC		= $(NAME)
+DEFINE_FLAGS :=
+BUILD_FLAGS := -Wall -Werror -pedantic -std=gnu99 -fgnu89-inline
+DEBUG_FLAGS := -g
+LIB_FLAGS := -lpcap
+CFLAGS := $(DEBUG_FLAGS) $(BUILD_FLAGS) $(DEFINE_FLAGS) -I. $(LIB_FLAGS)
+OBJ_DIR := .objects
 
-CC		= gcc
-CFLAGS		= -std=gnu99 -Wall
-LDFLAGS		= -lm
+CC := gcc
+SOURCES := $(wildcard *.c)
+OBJECTS := $(addprefix $(OBJ_DIR)/, $(SOURCES:.c=.o))
+LIBS := 
+EXE := capture
 
-OBJ		= PacketCapture.o
+.PHONY: clean all
 
-all:		run
+all: $(EXE)
 
-$(EXEC):	$(OBJ)
-		$(CC) $(CFLAGS) -o $@ $(OBJ) $(LDFLAGS)
+$(EXE): $(OBJECTS) $(LIBS)
+	$(CC) -o $@ $(filter %.o, $^) $(CFLAGS)
 
-run:		$(EXEC)
+$(OBJ_DIR):
+	mkdir $(OBJ_DIR)
 
-.INTERMEDIATE:	$(OBJ)
+$(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-		rm $(EXEC)	
+	-rm -rf $(OBJ_DIR)
+	-rm $(EXE)

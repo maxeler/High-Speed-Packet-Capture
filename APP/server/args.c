@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "args.h"
+#include "log.h"
 
 
 static error_t parse_opt( int key, char *arg, struct argp_state *state )
@@ -16,7 +17,13 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 	{
 		case 'v':
 		{
-			arguments->log_level = atoi(arg);
+			int level = log_level_from_str(arg);
+			if( level == -1 )
+			{
+				argp_error(state, "Invalid level '%s'\n", arg);
+			}
+
+			arguments->log_level = level;
 
 			break;
 		}
@@ -68,8 +75,7 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state )
 		}
 		case ARGP_KEY_END:
 		{
-			if( (state->argc == 2 && state->arg_num < 1)
-				|| (state->argc == 3 && state->arg_num < 2) )
+			if( state->arg_num < 1 || state->arg_num > 2 )
 			{
 				argp_usage(state);
 			}
@@ -91,16 +97,10 @@ static char doc[] = "";
 
 static char args_doc[] = "[ip] file.pcap";
 
-static struct argp_option options[] = {
-	{
-		.name = "verbose",
-		.key = 'v',
-		.arg = "level",
-		.flags = 0,
-		.doc = "",
-	},
-
+static struct argp_option options[] =
+{
+	{"verbose", 'v', "level", 0, "Set log level", 0},
 	{0}
 };
 
-struct argp argp = {options, parse_opt, args_doc, doc};
+struct argp argp = {options, parse_opt, args_doc, doc, 0, 0, 0};

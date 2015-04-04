@@ -61,7 +61,7 @@ static int handle_client( pcap_t* pcap, int conh );
 
 static int read_data( int fd, void* buffer, ssize_t read_size );
 
-static void print_data( uint8_t* buffer, ssize_t buffer_size );
+static void print_data( uint8_t* buffer, size_t buffer_size );
 
 int main( int argc, char* argv[] )
 {
@@ -75,8 +75,8 @@ int main( int argc, char* argv[] )
 	argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
 	char* server_ip_str = strdup(inet_ntoa(arguments.server_ip));
-	g_log_prepend = server_ip_str;
-	g_log_level = arguments.log_level;
+	log_prepend_set(server_ip_str);
+	log_level_set(arguments.log_level);
 
 	// init pcap
 	pcap_t* pcap = pcap_init(arguments.capture_file, PCAP_TZONE, PCAP_NETWORK, PCAP_SIGFIGS, PCAP_SNAPLEN);
@@ -162,7 +162,7 @@ static int handle_client( pcap_t* pcap, int con_fd )
 	int buffer_size = fmax(HEADER_SIZE, DATA_SIZE_MAX);
 	uint64_t* buffer = malloc(buffer_size);
 
-	size_t total_packets = 0; // note: may overflow
+	size_t packets_count = 0; // note: may overflow
 	size_t read_size = HEADER_SIZE;
 	enum read_mode_e read_mode = READ_MODE_HEADER;
 	frame_t frame;
@@ -198,7 +198,7 @@ static int handle_client( pcap_t* pcap, int con_fd )
 			return 1;
 		}
 
-		if( g_log_level >= LOG_LEVEL_INFO )
+		if( log_level_active(LOG_LEVEL_INFO) )
 		{
 			print_data((uint8_t*) buffer, read_size);
 		}
@@ -222,8 +222,8 @@ static int handle_client( pcap_t* pcap, int con_fd )
 				// report stats
 				if( frame.eof )
 				{
-					total_packets++;
-					logf_info("Total packets: %ld\n", total_packets);
+					packets_count++;
+					logf_info("Total packets: %zd\n", packets_count);
 				}
 
 				break;
@@ -341,11 +341,11 @@ static int read_data( int fd, void* buffer, ssize_t read_size )
 	}
 }
 
-static void print_data( uint8_t* buffer, ssize_t buffer_size )
+static void print_data( uint8_t* buffer, size_t buffer_size )
 {
 	char str[BUFSIZ];
 	int str_len = 0;
-	str_len += snprintf((str + str_len), BUFSIZ, "read %ldB: ", buffer_size);
+	str_len += snprintf((str + str_len), BUFSIZ, "read %zdB: ", buffer_size);
 	for( int i=0; (i * sizeof(*buffer))<buffer_size; i++ )
 	{
 		if( i != 0 )
