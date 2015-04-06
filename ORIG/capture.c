@@ -64,7 +64,7 @@ int main( int argc, char** argv )
 	FILE* file = fopen(arguments.file, "w+");
 	if( file == NULL )
 	{
-		printf("Unable to open capture file: '%s' (errno=%d '%s')", arguments.file, errno, strerror(errno));
+		fprintf(stderr, "Unable to open capture file: '%s' (errno=%d '%s')", arguments.file, errno, strerror(errno));
 		ret = EXIT_FAILURE;
 		goto error0;
 	}
@@ -76,7 +76,7 @@ int main( int argc, char** argv )
 	pcap_t* pcap = pcap_open_live(arguments.ifname, PCAP_SNAP_LEN, 1, 0, errbuf);
 	if( pcap == NULL )
 	{
-		printf("Unable to start capture: '%s'\n", errbuf);
+		fprintf(stderr, "Unable to start capture: '%s'\n", errbuf);
 		ret = EXIT_FAILURE;
 		goto error1;
 	}
@@ -87,7 +87,7 @@ int main( int argc, char** argv )
 	pcap_dumper_t* pdump = pcap_dump_open(pcap, arguments.file);
 	if( pdump == NULL )
 	{
-		printf("Unable to create capture file: '%s'\n", pcap_geterr(pcap));
+		fprintf(stderr, "Unable to create capture file: '%s'\n", pcap_geterr(pcap));
 		ret = EXIT_FAILURE;
 		goto error2;
 	}
@@ -111,7 +111,7 @@ int main( int argc, char** argv )
 		}
 		else if( status != 1  )
 		{
-			printf("Unable to read packet: '%s'\n", pcap_geterr(pcap));
+			fprintf(stderr, "Unable to read packet: '%s'\n", pcap_geterr(pcap));
 			ret = EXIT_FAILURE;
 			goto error3;
 		}
