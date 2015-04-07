@@ -26,6 +26,7 @@ void handle_exit( )
 	g_exiting = 1;
 	fprintf(stderr, "Exiting. (Send again to exit immediately)\n");
 	signal(SIGINT, SIG_DFL);
+	signal(SIGTERM, SIG_DFL);
 }
 
 void print_packet( const void* _data, size_t len )
@@ -94,6 +95,7 @@ int main( int argc, char** argv )
 
 	// set exit handler
 	signal(SIGINT, handle_exit);
+	signal(SIGTERM, handle_exit);
 
 	// read packets
 	logf_info("Running capture (%s)\n", arguments.ifname);
