@@ -14,7 +14,7 @@ Use `run_tests.sh` to run all the tests.
 This must be run with root permissions so that some of the tests can create a network tap.
 
 ``` console
-$ sudo ./run_tests.sh
+$ sudo -E ./run_tests.sh
 ```
 
 ## To Do

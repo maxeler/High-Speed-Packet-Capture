@@ -1,5 +1,6 @@
 import unittest
 import orig
+import app
 
 
 if __name__ == '__main__':
@@ -7,3 +8,7 @@ if __name__ == '__main__':
 
     print '[ORIG]'
     runner.run(orig.suite)
+    print '[APP.client.simulation]'
+    runner.run(app.client.simulation.suite)
+    print '[APP.server]'
+    runner.run(app.client.simulation.suite)

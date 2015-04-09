@@ -9,7 +9,7 @@ import os
 APP = '../ORIG/capture'
 TAP_NAME = 'tap_captest'
 TAP_BAD_NAME = 'BADTAPNAME' # this should not exist
-FILE = 'capture.pcap'
+CAPTURE_FILE = 'capture.pcap'
 
 def check_output(args):
     process = Popen(args, stdout=PIPE, stderr=PIPE)
@@ -21,6 +21,7 @@ def check_output(args):
         exception.stderr = stderr
         raise exception
     return stdout, stderr
+
 
 class TestArgs(unittest.TestCase):
 
@@ -41,25 +42,8 @@ class TestArgs(unittest.TestCase):
         self._testArgsException([APP, TAP_NAME])
 
     def testTooMany(self):
-        self._testArgsException([APP, TAP_NAME, FILE, "extra-arg"])
+        self._testArgsException([APP, TAP_NAME, CAPTURE_FILE, "extra-arg"])
 
-    def testCorrect(self):
-        # make sure bad tap does not exist
-        try:
-            name = TAP_BAD_NAME
-            check_output(['ifconfig', name])
-            self.fail('Interface "%s" should NOT exist during testing' % name)
-        except CalledProcessError as e:
-            pass
-
-        # test with correct args
-        try:
-            self.assertFalse(TAP_BAD_NAME in '')
-            check_output([APP, TAP_BAD_NAME, FILE])
-            self.fail()
-        except CalledProcessError as e:
-            self.assertTrue('returned non-zero exit status' in str(e))
-            self.assertTrue('Unable to start capture' in e.stderr)
 
 class TestCapture(unittest.TestCase):
 
@@ -77,7 +61,7 @@ class TestCapture(unittest.TestCase):
 
         # start capture
         devnull = open(os.devnull, 'w')
-        process = Popen([APP, iface, FILE], stdout=devnull, stderr=devnull)
+        process = Popen([APP, iface, CAPTURE_FILE], stdout=devnull, stderr=devnull)
 
         # send packets
         send_hashes = []
@@ -96,8 +80,8 @@ class TestCapture(unittest.TestCase):
         sendp(IP(), iface=iface, verbose=False)
         process.poll()
 
-        # verify capture file
-        pcap = rdpcap(FILE)
+        # verify capture CAPTURE_FILE
+        pcap = rdpcap(CAPTURE_FILE)
         recv_hashes = sorted([md5(p.build()).digest() for p in pcap])
         send_hashes = sorted(send_hashes)
         i = 0
@@ -109,6 +93,7 @@ class TestCapture(unittest.TestCase):
                     break
                 i += 1
             self.assertTrue(found)
+
 
 def make_suite():
     ts = unittest.TestSuite()
