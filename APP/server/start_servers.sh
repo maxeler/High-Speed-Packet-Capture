@@ -39,7 +39,7 @@ do
 	file="capture_$ip.pcap"
 	if [ $LOG_ENABLE -eq 1 ]
 	then
-		unbuffer $SERVER $ip $PORT $CAPTURE_DIR/$file 2>&1 | tee $LOG_DIR/log_$ip&
+		unbuffer $SERVER $ip $CAPTURE_DIR/$file 2>&1 | tee $LOG_DIR/log_$ip&
 	else
 		$SERVER $ip $CAPTURE_DIR/$file&
 	fi
