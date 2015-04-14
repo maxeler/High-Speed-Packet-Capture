@@ -1,5 +1,5 @@
 /*
- * PacketCapture.c
+ * CaptureClient.c
  */
 
 #include <inttypes.h>
@@ -62,7 +62,7 @@ int main( int argc, char** argv )
 
 	// load bitstream onto DFE
 	log_info("Loading bitstream.\n");
-	max_file_t *maxfile = PacketCapture_init();
+	max_file_t *maxfile = CaptureClient_init();
 	max_engine_t* engine = max_load(maxfile, "*");
 
 	// configure DFE
@@ -99,7 +99,7 @@ int main( int argc, char** argv )
 	// cleanup
 	max_unload(engine);
 	engine = NULL;
-	PacketCapture_free();
+	CaptureClient_free();
 	free(dfe_ip_str);
 	dfe_ip_str = NULL;
 
@@ -170,14 +170,14 @@ static void init_server_capture( max_engine_t * engine,
 	log_info("Running.\n");
 
 	// configure DFE with socket handles
-	PacketCapture_enableRemoteCapture_actions_t action =
+	CaptureClient_enableRemoteCapture_actions_t action =
 	{
 		.param_socketsALen = ipsA_len,
 		.param_socketsA = sockA_nums,
 		.param_socketsBLen = ipsB_len,
 		.param_socketsB = sockB_nums,
 	};
-	PacketCapture_enableRemoteCapture_run(engine, &action);
+	CaptureClient_enableRemoteCapture_run(engine, &action);
 }
 
 static int local_read_loop( max_engine_t* engine, FILE* file )
@@ -203,11 +203,11 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 		uint64_t* data = calloc(1, data_size);
 		assert(data != NULL);
 
-		PacketCapture_readCaptureData_actions_t action = {
+		CaptureClient_readCaptureData_actions_t action = {
 			.param_len = frames_len,
 			.outstream_toCpu = data,
 		};
-		PacketCapture_readCaptureData_run(engine, &action);
+		CaptureClient_readCaptureData_run(engine, &action);
 
 		// debug print data
 		if( log_level_active(LOG_LEVEL_TRACE) )

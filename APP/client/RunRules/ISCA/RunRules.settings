@@ -6,7 +6,7 @@
 <enableMPCX enabled="false"/>
 </common>
 <maxFiles>
-<maxFile buildName="PacketCapture" buildOrUseExisting="build">
+<maxFile buildName="CaptureClient" buildOrUseExisting="build">
 <runConfiguration askBeforeAutoBuild="true">
 <mainClass>com.maxeler.packetCapture.CaptureManager</mainClass>
 <maxHeapSize>2</maxHeapSize>
@@ -17,7 +17,7 @@
 </maxFiles>
 <cpuCode targetType="executable">
 <libraryName/>
-<exeName>PacketCapture</exeName>
+<exeName>CaptureClient</exeName>
 <skin>
 <ancillaryReleaseInformation enabled="false">
 <dir name=""/>

@@ -49,20 +49,20 @@ build: maxfiles
 maxfiles: $(MAXFILES_MAX)
 
 #
-# MaxFile: PacketCaptureClient
+# MaxFile: CaptureClient
 #
 
 
-BUILDNAME_MAXFILE_1:=PacketCaptureClient
-MAXFILE_1:=PacketCaptureClient.max
+BUILDNAME_MAXFILE_1:=CaptureClient
+MAXFILE_1:=CaptureClient.max
 
-include/PacketCaptureClient.h: maxfiles/PacketCaptureClient.h
+include/CaptureClient.h: maxfiles/CaptureClient.h
 	cp $< $@
 
-maxfiles/PacketCaptureClient.max maxfiles/PacketCaptureClient.h:
+maxfiles/CaptureClient.max maxfiles/CaptureClient.h:
 # Ensure that maxfiles do not get build by this Makefile when running in MaxIDE
 ifndef MAXIDE_RUN
-	test -f $@ || env  MAX_BUILDPARAMS=" DFEModel=ISCA  target=DFE  maxFileName=PacketCaptureClient "  ant -v -f PacketCaptureClient.xml
+	test -f $@ || env  MAX_BUILDPARAMS=" DFEModel=ISCA  target=DFE  maxFileName=CaptureClient "  ant -v -f CaptureClient.xml
 else
 	test -f $@ || ( echo 'Maxfile unavailable: $@' >/dev/stderr ; exit 1 )
 endif
