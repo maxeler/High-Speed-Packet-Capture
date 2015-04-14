@@ -1,35 +1,15 @@
-from subprocess import check_call, Popen, PIPE, CalledProcessError
+from subprocess import check_call, call, Popen, PIPE, CalledProcessError
 import unittest
 from pytun import TunTapDevice, IFF_TAP
 import time
 from scapy.all import IP, ICMP, sendp, rdpcap
 from hashlib import md5
-import os
+
+from utils import list_extend, check_output
 
 APP = '../APP/server/capture_server'
 SERVER_IP = '5.5.5.2'
 CAPTURE_FILE = 'capture.pcap'
-
-def list_extend(a, b):
-    c = list(a)
-    c.extend(b)
-    return c
-
-def check_output(run_args, *args, **kwargs):
-    kwargs['stdout'] = PIPE
-    kwargs['stderr'] = PIPE
-
-    process = Popen(run_args, *args, **kwargs)
-    stdout, stderr = process.communicate()
-
-    retcode = process.poll()
-    if retcode is not 0:
-        exception = CalledProcessError(retcode, run_args[0])
-        exception.stdout = stdout
-        exception.stderr = stderr
-        raise exception
-
-    return stdout, stderr
 
 
 class TestArgs(unittest.TestCase):

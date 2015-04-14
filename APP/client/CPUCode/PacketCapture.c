@@ -185,7 +185,7 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 	int frames_len = 2;
 	int data_size = CAPTURE_DATA_SIZE * frames_len;
 
-	pcap_t* pcap = pcap_create(file, PCAP_TZONE, PCAP_NETWORK, PCAP_SIGFIGS, PCAP_SNAPLEN);
+	pcap_t* pcap = pcap_init(file, PCAP_TZONE, PCAP_NETWORK, PCAP_SIGFIGS, PCAP_SNAPLEN);
 	assert(pcap != NULL);
 
 	// disable pcie timeout

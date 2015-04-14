@@ -6,21 +6,12 @@ from scapy.all import IP, ICMP, sendp, rdpcap
 from hashlib import md5
 import os
 
+from utils import list_extend, check_output, DEV_NULL
+
 APP = '../ORIG/capture'
 TAP_NAME = 'tap_captest'
 TAP_BAD_NAME = 'BADTAPNAME' # this should not exist
 CAPTURE_FILE = 'capture.pcap'
-
-def check_output(args):
-    process = Popen(args, stdout=PIPE, stderr=PIPE)
-    stdout, stderr = process.communicate()
-    retcode = process.poll()
-    if retcode is not 0:
-        exception = CalledProcessError(retcode, args[0])
-        exception.stdout = stdout
-        exception.stderr = stderr
-        raise exception
-    return stdout, stderr
 
 
 class TestArgs(unittest.TestCase):
@@ -56,12 +47,11 @@ class TestCapture(unittest.TestCase):
         self.tap.down()
         self.tap.close()
         
-    def testBasicCapture(self):
+    def testBasic(self):
         iface = self.tap.name
 
         # start capture
-        devnull = open(os.devnull, 'w')
-        process = Popen([APP, iface, CAPTURE_FILE], stdout=devnull, stderr=devnull)
+        process = Popen([APP, iface, CAPTURE_FILE], stdout=DEV_NULL, stderr=DEV_NULL)
 
         # send packets
         send_hashes = []
