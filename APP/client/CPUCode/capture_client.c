@@ -67,21 +67,29 @@ int main( int argc, char** argv )
 
 	// configure DFE
 	log_info("Initializing DFE.\n");
-	const char* server_if_name = max_get_constant_string(maxfile, "server_if_name");
-	max_net_connection_t dfe_server_if = -1;
-	int error = max_net_connection_from_name(&dfe_server_if, server_if_name);
-	if( error )
-	{
-		fprintf(stderr, "Error: Unable to lookup max_net_connection for '%s'\n", server_if_name);
-		return EXIT_FAILURE;
+
+	assert(arguments.remote_enabled || arguments.local_enabled);
+
+	if( arguments.remote_enabled )
+	{ // remote data transfer
+		const char* server_if_name = max_get_constant_string(maxfile, "server_if_name");
+		max_net_connection_t dfe_server_if = -1;
+
+		int error = max_net_connection_from_name(&dfe_server_if, server_if_name);
+		if( error )
+		{
+			fprintf(stderr, "Error: Unable to lookup max_net_connection for '%s'\n", server_if_name);
+			return EXIT_FAILURE;
+		}
+
+		init_server_capture(engine, dfe_server_if, &arguments.dfe_ip, &arguments.dfe_netmask, arguments.ipsA, arguments.ipsA_len, arguments.ipsB, arguments.ipsB_len);
 	}
-	init_server_capture(engine, dfe_server_if, &arguments.dfe_ip, &arguments.dfe_netmask, arguments.ipsA, arguments.ipsA_len, arguments.ipsB, arguments.ipsB_len);
 
 	if( arguments.local_enabled )
 	{ // local data transfer
 		log_info("Servicing DFE.\n");
 
-		error = local_read_loop(engine, arguments.local_file);
+		int error = local_read_loop(engine, arguments.local_file);
 		if( error )
 		{
 			fprintf(stderr, "Error: Unable to read local capture data\n");
