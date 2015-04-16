@@ -1,0 +1,46 @@
+package com.maxeler.packetCapture;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+
+public class CaptureParameters extends EngineParameters
+{
+	static final String TAG_NAME = "tag";
+
+	public CaptureParameters( String[] args )
+	{
+		super(args);
+	}
+
+	@Override
+	protected void declarations()
+	{
+		this.declareParam(TAG_NAME, DataType.STRING, "");
+	}
+
+	public String getTag( )
+	{
+		return getParam(TAG_NAME);
+	}
+
+	@Override
+	public String getBuildName()
+	{
+		StringBuilder name = new StringBuilder();
+		name.append(this.getMaxFileName());
+
+		// tag
+		String tag = this.getTag();
+		if( !tag.isEmpty() )
+		{
+			name.append("_" + tag);
+		}
+
+		// target
+		name.append("_" + this.getTarget());
+
+		// model
+		name.append("_" + this.getDFEModel());
+
+		return name.toString();
+	}
+}
