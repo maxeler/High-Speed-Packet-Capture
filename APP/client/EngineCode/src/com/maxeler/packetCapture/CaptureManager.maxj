@@ -30,7 +30,7 @@ public class CaptureManager extends NetworkManager
 	private static final int BURST_BITS = 192;
 	private static final int SERVER_COUNT_MAX = 2;
 	private static final long FIFO_START = 0;
-	private static final long FIFO_DEPTH = 1024;
+	private static final long FIFO_DEPTH = 16 * 1024 * 1024;
 
 	// TODO: lookup connections from build parameters
 	private static final Max4NetworkConnection CAPTURE_IF = Max4NetworkConnection.QSFP_TOP_10G_PORT1;
