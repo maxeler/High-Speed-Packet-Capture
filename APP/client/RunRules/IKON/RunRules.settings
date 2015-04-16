@@ -17,7 +17,7 @@
 </maxFiles>
 <cpuCode targetType="executable">
 <libraryName/>
-<exeName>CaptureClient</exeName>
+<exeName>capture_client</exeName>
 <skin>
 <ancillaryReleaseInformation enabled="false">
 <dir name=""/>
@@ -45,6 +45,6 @@
 <ipAddressTwo/>
 <netmaskTwo/>
 <pcapFileTwo/>
-<max4v1net enabled="true"/>
+<max4v1net enabled="false"/>
 </simulator>
 </buildProfile>

@@ -17,7 +17,7 @@
 </maxFiles>
 <cpuCode targetType="executable">
 <libraryName/>
-<exeName>CaptureClient</exeName>
+<exeName>capture_client</exeName>
 <skin>
 <ancillaryReleaseInformation enabled="false">
 <dir name=""/>
