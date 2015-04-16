@@ -32,11 +32,10 @@ public class CaptureManager extends NetworkManager
 	private static final long FIFO_START = 0;
 	private static final long FIFO_DEPTH = 16 * 1024 * 1024;
 
-	// TODO: write to maxfile constant
-	private static final Max4NetworkConnection CAPTURE_IF = Max4NetworkConnection.QSFP_TOP_10G_PORT1;
-	private static final Max4NetworkConnection SERVER_IF = Max4NetworkConnection.QSFP_TOP_10G_PORT2;
+	// TODO: lookup connections from build parameters
+	private static final Max4NetworkConnection CAPTURE_IF = Max4NetworkConnection.IKON_XE32_10G;
+	private static final Max4NetworkConnection SERVER_IF = Max4NetworkConnection.IKON_XE33_10G;
 
-	// TODO: write to maxfile constant
 	private static final int TIME_PRECISION = 8;
 
 	public static void main( String[] args )
@@ -55,6 +54,8 @@ public class CaptureManager extends NetworkManager
 
 		// max constants
 		manager.addMaxFileStringConstant("server_if_name", SERVER_IF.name());
+		manager.addMaxFileStringConstant("capture_if_name", CAPTURE_IF.name());
+		manager.addMaxFileConstant("capture_precision", TIME_PRECISION);
 
 		// create CPU interfaces
 		manager.createSLiCinterface(createRemoteInterface(SERVER_COUNT_MAX));
