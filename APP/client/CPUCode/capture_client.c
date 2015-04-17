@@ -31,6 +31,8 @@ static int PCAP_SNAPLEN = 65535;
 static int SERVER_PORT = 2511;
 static int CAPTURE_DATA_SIZE = 256 / 8;
 
+static const char* DFE_LOCAL_STR = "Local";
+
 volatile sig_atomic_t g_shutdown = 0;
 
 static void init_server_capture( max_engine_t * engine,
@@ -56,7 +58,16 @@ int main( int argc, char** argv )
 
 	argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
-	char* dfe_ip_str = strdup(inet_ntoa(arguments.dfe_ip));
+	char* dfe_ip_str;
+	if( arguments.remote_enabled )
+	{
+		dfe_ip_str = strdup(inet_ntoa(arguments.dfe_ip));
+	}
+	else // !arguments.remote_enabled
+	{
+		dfe_ip_str = strdup(DFE_LOCAL_STR);
+	}
+
 	log_prepend_set(dfe_ip_str);
 	log_level_set(arguments.log_level);
 
