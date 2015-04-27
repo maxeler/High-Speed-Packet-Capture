@@ -144,13 +144,18 @@ class TestCapture(unittest.TestCase):
         # broadcast
         send_data = []
         for i in range(0, 255):
-            packet = IP(dst="255.255.255.255")/ICMP()
+            packet = Ether(dst="FF:FF:FF:FF:FF:FF")/IP(dst="255.255.255.255")/ICMP()
             sendp(packet, iface=self.server_iface, verbose=False)
             send_data.append(self._makeData(packet))
-        # non-broadcast
         send_group_data['A'] = send_data
-        TODO: make sure sending broadcast data
-        TODO: send non broadcast data
+
+        # non-broadcast
+        send_data = []
+        for i in range(0, 255):
+            packet = Ether(dst="AA:AA:AA:AA:AA:AA")/IP(dst="5.5.5.5")/ICMP()
+            sendp(packet, iface=self.server_iface, verbose=False)
+            send_data.append(self._makeData(packet))
+        send_group_data['B'] = send_data
 
         # wait for stragglers
         time.sleep(1)
