@@ -73,20 +73,23 @@ class TestCapture(unittest.TestCase):
             data = raw
         return data
 
-    def _checkData(clazz, sent, received):
-        received = [r.build() for r in received]
-        # hash
-        if clazz.should_hash:
-            received = [md5(r).digest() for r in received]
+    def _checkData(clazz, sent_raw, received):
+        # hash received
+        received_raw = []
+        for packet in received:
+            raw = packet.build()
+            if clazz.should_hash:
+                raw = md5(raw).digest()
+            received_raw.append(raw)
         # sort
-        received = sorted(received)
-        sent = sorted(sent)
+        received_raw = sorted(received_raw)
+        sent_raw = sorted(sent_raw)
         # check
         i = 0
-        for s in sent:
+        for s in sent_raw:
             found = False
-            while i < len(received):
-                r = received[i]
+            while i < len(received_raw):
+                r = received_raw[i]
                 # note: maxethsimd is unfortuantely padding some data with zeros
                 if s == r[:len(s)]:
                     # ensure remaining data is all zeros
@@ -153,7 +156,7 @@ class TestCapture(unittest.TestCase):
         # send packets
         send_data = []
         for i in range(0, 255):
-            packet = IP(dst="www.google.com")/ICMP()
+            packet = IP(dst='127.0.0.2')/ICMP()
             sendp(packet, iface=self.iface, verbose=False)
             send_data.append(self._makeData(packet))
 
@@ -171,32 +174,8 @@ class TestCapture(unittest.TestCase):
         process.wait()
 
         # verify capture CAPTURE_FILE
-        # receive_data = rdpcap(CAPTURE_FILE)
-        # self.assertTrue(self._checkData(send_data, receive_data))
-        pcap = rdpcap(CAPTURE_FILE)
-        recv_data = sorted([self._makeData(p) for p in pcap])
-        send_data = sorted(send_data)
-
-        i = 0
-        for datum in send_data:
-            # import base64
-            #print "%d: %s" % (i, base64.b64encode(datum))
-            # import binascii
-            # print "%d: %s" % (i, binascii.hexlify(datum))
-            found = False
-            while i<len(recv_data):
-                # note: maxethsimd is unfortuantely padding some data with zeros
-                # check for datum
-                recv_datum = recv_data[i]
-                if recv_datum[:len(datum)] == datum:
-                    # check for '0' padding
-                    j = len(datum)
-                    while j<len(recv_datum) and recv_datum[j] == chr(0):
-                        j += 1
-                    if j == len(recv_datum):
-                        found = True
-                        break
-                i += 1
+        receive_data = rdpcap(CAPTURE_FILE)
+        self.assertTrue(self._checkData(send_data, receive_data))
 
 
 def make_suite():

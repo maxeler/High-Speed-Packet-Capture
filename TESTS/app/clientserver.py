@@ -1,7 +1,7 @@
 from subprocess import check_call, call, Popen, PIPE, CalledProcessError
 import unittest
 import time
-from scapy.all import IP, ICMP, sendp
+from scapy.all import Ether, IP, ICMP, sendp
 from hashlib import md5
 import os
 import signal
@@ -50,20 +50,23 @@ class TestCapture(unittest.TestCase):
             data = raw
         return data
 
-    def _checkData(clazz, sent, received):
-        received = [r.build() for r in received]
-        # hash
-        if clazz.should_hash:
-            received = [md5(r).digest() for r in received]
+    def _checkData(clazz, sent_raw, received):
+        # hash received
+        received_raw = []
+        for packet in received:
+            raw = packet.build()
+            if clazz.should_hash:
+                raw = md5(raw).digest()
+            received_raw.append(raw)
         # sort
-        received = sorted(received)
-        sent = sorted(sent)
+        received_raw = sorted(received_raw)
+        sent_raw = sorted(sent_raw)
         # check
         i = 0
-        for s in sent:
+        for s in sent_raw:
             found = False
-            while i < len(received):
-                r = received[i]
+            while i < len(received_raw):
+                r = received_raw[i]
                 # note: maxethsimd is unfortuantely padding some data with zeros
                 if s == r[:len(s)]:
                     # ensure remaining data is all zeros
@@ -82,21 +85,20 @@ class TestCapture(unittest.TestCase):
         self.processes = []
 
         # setup env
-        env = make_sim_env(SIM_NAME)
-        check_call(list_extend(SIM_ARGS, ['restart']), env=env, stdout=DEV_NULL, stderr=DEV_NULL)
+        self.env = make_sim_env(SIM_NAME)
+        check_call(list_extend(SIM_ARGS, ['restart']), env=self.env, stdout=DEV_NULL, stderr=DEV_NULL)
 
         # give some time for setup
         time.sleep(1)
 
         # add server ips to sim tap
-        iface = lookup_interface_from_addr(DFE_SERVER_PORT_IP)
+        self.server_iface = lookup_interface_from_addr(DFE_SERVER_PORT_IP)
         for group in SERVER_IPS.keys():
             for i in range(len(SERVER_IPS[group])):
                 ip = SERVER_IPS[group][i]
-                check_call(['ip', 'addr', 'add', ip, 'broadcast', SERVER_NETMASK, 'dev', iface])
+                check_call(['ip', 'addr', 'add', ip, 'broadcast', SERVER_NETMASK, 'dev', self.server_iface])
 
-        self.env = env
-        self.server_iface = iface
+        self.capture_iface = lookup_interface_from_addr(DFE_CAPTURE_PORT_IP)
 
     def tearDown(self):
         def kill(process):
@@ -124,7 +126,7 @@ class TestCapture(unittest.TestCase):
             for i in range(len(SERVER_IPS[group])):
                 ip = SERVER_IPS[group][i]
                 cfile = CAPTURE_FILES[group][i]
-                server = Popen([SERVER_APP, ip, cfile])#, stdout=DEV_NULL, stderr=DEV_NULL)
+                server = Popen([SERVER_APP, ip, cfile], stdout=DEV_NULL, stderr=DEV_NULL)
                 servers.append(server)
                 self.processes.append(server)
 
@@ -134,26 +136,23 @@ class TestCapture(unittest.TestCase):
             for i in range(len(SERVER_IPS[group])):
                 ip = SERVER_IPS[group][i]
                 args.extend(['-r%s' % group, ip])
-        client = Popen(args, env=self.env)#, stdout=DEV_NULL, stderr=DEV_NULL)
+        client = Popen(args, env=self.env, stdout=DEV_NULL, stderr=DEV_NULL)
         self.processes.append(client)
-
-        time.sleep(20)
 
         # send packets
         send_group_data = {}
         # broadcast
         send_data = []
         for i in range(0, 255):
-            packet = Ether(dst="FF:FF:FF:FF:FF:FF")/IP(dst="255.255.255.255")/ICMP()
-            sendp(packet, iface=self.server_iface, verbose=False)
+            packet = Ether(dst='FF:FF:FF:FF:FF:FF')/IP(dst='127.0.0.2')/ICMP()
+            sendp(packet, iface=self.capture_iface, verbose=False)
             send_data.append(self._makeData(packet))
         send_group_data['A'] = send_data
-
         # non-broadcast
         send_data = []
         for i in range(0, 255):
-            packet = Ether(dst="AA:AA:AA:AA:AA:AA")/IP(dst="5.5.5.5")/ICMP()
-            sendp(packet, iface=self.server_iface, verbose=False)
+            packet = Ether(dst='AA:AA:AA:AA:AA:AA')/IP(dst='127.0.0.2')/ICMP()
+            sendp(packet, iface=self.capture_iface, verbose=False)
             send_data.append(self._makeData(packet))
         send_group_data['B'] = send_data
 
@@ -180,38 +179,15 @@ class TestCapture(unittest.TestCase):
         for group in SERVER_IPS:
             for i in range(len(SERVER_IPS[group])):
                 cfile = CAPTURE_FILES[group][i]
-                print "cfile: ", cfile
                 # append packets
                 data = receive_group_data.get(group, [])
                 data.extend(rdpcap(cfile))
                 receive_group_data[group] = data
 
-                print "group: %s (%d)" % (group, len(data))
-
-        # recv_data = sorted([self._makeData(p) for p in pcap])
-        # send_data = sorted(send_data)
-
-        # i = 0
-        # for datum in send_data:
-        #     # import base64
-        #     #print "%d: %s" % (i, base64.b64encode(datum))
-        #     # import binascii
-        #     # print "%d: %s" % (i, binascii.hexlify(datum))
-        #     found = False
-        #     while i<len(recv_data):
-        #         # note: maxethsimd is unfortuantely padding some data with zeros
-        #         # check for datum
-        #         recv_datum = recv_data[i]
-        #         if recv_datum[:len(datum)] == datum:
-        #             # check for '0' padding
-        #             j = len(datum)
-        #             while j<len(recv_datum) and recv_datum[j] == chr(0):
-        #                 j += 1
-        #             if j == len(recv_datum):
-        #                 found = True
-        #                 break
-        #         i += 1
-        #     self.assertTrue(found)
+        for group in SERVER_IPS:
+            send_data = send_group_data[group]
+            receive_data = receive_group_data[group]
+            self.assertTrue(self._checkData(send_data, receive_data))
 
 
 
@@ -223,6 +199,6 @@ def make_suite():
 
 suite = make_suite()
         
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()
 
