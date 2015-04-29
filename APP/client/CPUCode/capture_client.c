@@ -229,6 +229,8 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 		thread_args_t args = {&packets_count, &packets_count_mutex};
 
 		thread = malloc(sizeof(&thread));
+		assert(thread != NULL);
+
 		int error = pthread_create(thread, NULL, print_packets_count, (void*) &args);
 		if( error )
 		{
@@ -240,12 +242,11 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 	// service
 	pcap_packet_t* packet = NULL;
 	int sof_expected = 1;
+	uint64_t* data = malloc(data_size);
+	assert(data != NULL);
 	while( 1 )
 	{
 		logf_debug("Reading %d frames (%dB)\n\n", frames_len, data_size);
-
-		uint64_t* data = calloc(1, data_size);
-		assert(data != NULL);
 
 		CaptureClient_readCaptureData_actions_t action = {
 			.param_len = frames_len,
@@ -364,8 +365,9 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 				}
 			}
 
-			frame_free(frame);
-			frame = NULL;
+			// cleanup
+			capture_data_free(capture_data);
+			capture_data = NULL;
 		}
 	}
 
@@ -377,6 +379,15 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 		free(thread);
 		thread = NULL;
 	}
+
+	if( packet != NULL )
+	{
+		pcap_packet_free(packet);
+		packet = NULL;
+	}
+
+	free(data);
+	data = NULL;
 
 	return 0;
 }

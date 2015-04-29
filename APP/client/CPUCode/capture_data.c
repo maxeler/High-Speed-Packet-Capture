@@ -61,6 +61,7 @@ capture_data_t* capture_data_parse( uint64_t data[4] )
 	this->frame = parse_frame(data);
 	if( this->timestamp == NULL || this->frame == NULL )
 	{
+		capture_data_free(this);
 		return NULL;
 	}
 
