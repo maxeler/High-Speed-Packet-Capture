@@ -43,7 +43,7 @@ endif
 
 CFLAGS    = -std=gnu99 $(O_FLAGS) -Wall -Wextra -pedantic -I$(RUNRULE_DIR)/include -I$(LIB_COMMON_DIR) $(shell slic-config --cflags) $(RUNRULE_CFLAGS)
 CXXFLAGS  = -Wall -Wextra -pedantic $(O_FLAGS) -I$(RUNRULE_DIR)/include $(shell slic-config --cflags) $(RUNRULE_CFLAGS)
-LDFLAGS   = $(O_FLAGS) $(shell slic-config --libs) $(RUNRULE_LDFLAGS) -L$(LIB_COMMON_DIR) -lcommon
+LDFLAGS   = $(O_FLAGS) $(shell slic-config --libs) $(RUNRULE_LDFLAGS) -L$(LIB_COMMON_DIR) -lcommon -pthread
 
 #   Add other user-defined extensions here, e.g. --
 #CFLAGS    += -I/my/header/files

@@ -21,6 +21,7 @@
 #include "log.h"
 #include "utils.h"
 #include "args.h"
+#include "pthread.h"
 
 
 static int PCAP_TZONE = PCAP_TZONE_UTC;
@@ -32,8 +33,13 @@ static int SERVER_PORT = 2511;
 static int CAPTURE_DATA_SIZE = 256 / 8;
 
 static const char* DFE_LOCAL_STR = "Local";
+static const int PACKET_COUNT_INTERVAL = 1;
 
-volatile sig_atomic_t g_shutdown = 0;
+typedef struct
+{
+	size_t* count;
+	pthread_mutex_t* mutex;
+} thread_args_t;
 
 static void init_server_capture( max_engine_t * engine,
 								 max_net_connection_t dfe_if,
@@ -45,6 +51,8 @@ static void init_server_capture( max_engine_t * engine,
 								 int ipsB_len);
 
 static int local_read_loop( max_engine_t* engine, FILE* file );
+
+void* print_packets_count( void* arg );
 
 int main( int argc, char** argv )
 {
@@ -201,6 +209,7 @@ static void init_server_capture( max_engine_t * engine,
 
 static int local_read_loop( max_engine_t* engine, FILE* file )
 {
+	int error;
 	int frames_len = 2;
 	int data_size = CAPTURE_DATA_SIZE * frames_len;
 
@@ -210,14 +219,30 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 	// disable pcie timeout
 	max_config_set_int64(MAX_CONFIG_PCIE_TIMEOUT, 0);
 
+	// start packets_total thread
+	size_t packets_count = 0; // note: may overflow
+	size_t count = 0;
+	pthread_mutex_t packets_count_mutex = PTHREAD_MUTEX_INITIALIZER;
+	pthread_t* thread = NULL;
+	if( log_level_active(LOG_LEVEL_INFO) )
+	{
+		thread_args_t args = {&packets_count, &packets_count_mutex};
+
+		thread = malloc(sizeof(&thread));
+		int error = pthread_create(thread, NULL, print_packets_count, (void*) &args);
+		if( error )
+		{
+			fprintf(stderr, "Error: Unable to create thread\n");
+			return 1;
+		}
+	}
+
 	// service
 	pcap_packet_t* packet = NULL;
 	int sof_expected = 1;
-	size_t packets_count = 0; // note: may overflow
-	while( !g_shutdown )
+	while( 1 )
 	{
-		logf_debug("Reading %d frames (%dB)\n", frames_len, data_size);
-		log_debug("\n");
+		logf_debug("Reading %d frames (%dB)\n\n", frames_len, data_size);
 
 		uint64_t* data = calloc(1, data_size);
 		assert(data != NULL);
@@ -247,8 +272,10 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 			logf_trace("%s", str);
 		}
 
+		// process frames
 		for( int i=0; i<frames_len; i++ )
 		{
+			// debug print frame data
 			logf_debug("[frame = %d]\n", i);
 
 			int index = (4 * i);
@@ -274,10 +301,6 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 			int eof = frame_get_eof(frame);
 
 			assert(sof_expected == sof);
-//			if( sof_expected != sof )
-//			{
-//				fprintf(stderr, "\n\n*** ERROR: expected %d but got %d.\n\n", sof_expected, sof);
-//			}
 
 			if( sof )
 			{
@@ -317,8 +340,28 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 				packet = NULL;
 
 				sof_expected = 1;
-				packets_count++;
-				logf_info("Total packets: %zd\n", packets_count);
+				count++;
+
+				// try and update packets_count
+				error = pthread_mutex_trylock(&packets_count_mutex);
+				if( error )
+				{ // no lock
+					if( error != EBUSY )
+					{
+						return 1;
+					}
+				}
+				else // !error
+				{ // locked
+					// update
+					packets_count = count;
+
+					error = pthread_mutex_unlock(&packets_count_mutex);
+					if( error )
+					{
+						return 1;
+					}
+				}
 			}
 
 			frame_free(frame);
@@ -328,6 +371,47 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 
 	// cleanup
 	pcap_flush(pcap);
+	if( thread != NULL )
+	{
+		pthread_cancel(*thread);
+		free(thread);
+		thread = NULL;
+	}
 
 	return 0;
+}
+
+void* print_packets_count( void* _args )
+{
+	thread_args_t* args = (thread_args_t*) _args;
+	size_t count_prev = 0;
+	int first_pass = 1;
+
+	while( 1 )
+	{
+		pthread_mutex_lock(args->mutex);
+		size_t count = *args->count;
+		pthread_mutex_unlock(args->mutex);
+
+		int count_updated = count != count_prev;
+		count_prev = count;
+
+		if( first_pass || count_updated )
+		{
+			logf_info("Total Packets: %zd\n", count);
+		}
+
+		if( first_pass )
+		{
+			first_pass = 0;
+		}
+
+		int rem = PACKET_COUNT_INTERVAL;
+		while( rem != 0 )
+		{
+			rem = sleep(1);
+		}
+	}
+
+	return NULL;
 }

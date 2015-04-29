@@ -11,7 +11,7 @@ RUNRULE_MAXFILES_H  := CaptureClient.h
 RUNRULE_CFLAGS      := 
 RUNRULE_LDFLAGS     := 
 
-TARGET_EXEC         := CaptureClient
+TARGET_EXEC         := capture_client
 TARGET_LIBRARY      := 
 
 
