@@ -37,9 +37,16 @@ static const int PACKET_COUNT_INTERVAL = 1;
 
 typedef struct
 {
-	size_t* count;
+	size_t packets;
+	size_t frames;
+        size_t bytes;
+} stats_t;
+
+typedef struct
+{
+	stats_t* stats;
 	pthread_mutex_t* mutex;
-} thread_args_t;
+} stats_args_t;
 
 static void init_server_capture( max_engine_t * engine,
 								 max_net_connection_t dfe_if,
@@ -52,7 +59,7 @@ static void init_server_capture( max_engine_t * engine,
 
 static int local_read_loop( max_engine_t* engine, FILE* file );
 
-void* print_packets_count( void* arg );
+void* report_stats( void* arg );
 
 int main( int argc, char** argv )
 {
@@ -219,19 +226,19 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 	// disable pcie timeout
 	max_config_set_int64(MAX_CONFIG_PCIE_TIMEOUT, 0);
 
-	// start packets_total thread
-	size_t packets_count = 0; // note: may overflow
-	size_t count = 0;
-	pthread_mutex_t packets_count_mutex = PTHREAD_MUTEX_INITIALIZER;
+	// start stats reporting thread
+	stats_t stats = {0, 0, 0};
+	stats_t stats_local = {0, 0, 0};
+	pthread_mutex_t stats_mutex = PTHREAD_MUTEX_INITIALIZER;
 	pthread_t* thread = NULL;
 	if( log_level_active(LOG_LEVEL_INFO) )
 	{
-		thread_args_t args = {&packets_count, &packets_count_mutex};
+		stats_args_t args = {&stats, &stats_mutex};
 
 		thread = malloc(sizeof(&thread));
 		assert(thread != NULL);
 
-		int error = pthread_create(thread, NULL, print_packets_count, (void*) &args);
+		int error = pthread_create(thread, NULL, report_stats, (void*) &args);
 		if( error )
 		{
 			fprintf(stderr, "Error: Unable to create thread\n");
@@ -242,8 +249,10 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 	// service
 	pcap_packet_t* packet = NULL;
 	int sof_expected = 1;
+
 	uint64_t* data = malloc(data_size);
 	assert(data != NULL);
+
 	while( 1 )
 	{
 		logf_debug("Reading %d frames (%dB)\n\n", frames_len, data_size);
@@ -276,6 +285,8 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 		// process frames
 		for( int i=0; i<frames_len; i++ )
 		{
+			stats_local.frames++;
+
 			// debug print frame data
 			logf_debug("[frame = %d]\n", i);
 
@@ -330,6 +341,8 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 			int size = frame_get_size(frame);
 			pcap_packet_append(packet, data, size);
 
+			stats_local.bytes += size;
+
 			// write frame
 			if( eof )
 			{
@@ -341,27 +354,28 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 				packet = NULL;
 
 				sof_expected = 1;
-				count++;
+				stats_local.packets++;
 
-				// try and update packets_count
-				error = pthread_mutex_trylock(&packets_count_mutex);
-				if( error )
-				{ // no lock
-					if( error != EBUSY )
-					{
-						return 1;
-					}
+			}
+
+			// try and update stats
+			error = pthread_mutex_trylock(&stats_mutex);
+			if( error )
+			{ // no lock
+				if( error != EBUSY )
+				{
+					return 1;
 				}
-				else // !error
-				{ // locked
-					// update
-					packets_count = count;
+			}
+			else // !error
+			{ // locked
+				// update
+				stats = stats_local;
 
-					error = pthread_mutex_unlock(&packets_count_mutex);
-					if( error )
-					{
-						return 1;
-					}
+				error = pthread_mutex_unlock(&stats_mutex);
+				if( error )
+				{
+					return 1;
 				}
 			}
 
@@ -392,24 +406,24 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 	return 0;
 }
 
-void* print_packets_count( void* _args )
+void* report_stats( void* _args )
 {
-	thread_args_t* args = (thread_args_t*) _args;
-	size_t count_prev = 0;
+	stats_args_t* args = (stats_args_t*) _args;
+	stats_t stats_prev = {0, 0, 0};
 	int first_pass = 1;
 
 	while( 1 )
 	{
 		pthread_mutex_lock(args->mutex);
-		size_t count = *args->count;
+		stats_t stats = *args->stats;
 		pthread_mutex_unlock(args->mutex);
 
-		int count_updated = count != count_prev;
-		count_prev = count;
+		int stats_updated = stats_prev.frames != stats.frames;
+		stats_prev = stats;
 
-		if( first_pass || count_updated )
+		if( first_pass || stats_updated )
 		{
-			logf_info("Total Packets: %zd\n", count);
+			logf_info("Total: %zd packets (%zd frames, %zdB)\n", stats.packets, stats.frames, stats.bytes);
 		}
 
 		if( first_pass )
