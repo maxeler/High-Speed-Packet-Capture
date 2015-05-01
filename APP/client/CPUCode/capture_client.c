@@ -405,6 +405,7 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 
 	// cleanup
 	pcap_flush(pcap);
+
 	if( thread != NULL )
 	{
 		pthread_cancel(*thread);
@@ -417,6 +418,12 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 		pcap_packet_free(packet);
 		packet = NULL;
 	}
+
+	max_llstream_release(stream);
+	stream = NULL;
+
+	free(data_buffer);
+	data_buffer = NULL;
 
 	free(data_buffer);
 	data_buffer = NULL;
