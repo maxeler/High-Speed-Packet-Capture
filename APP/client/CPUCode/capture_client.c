@@ -277,19 +277,16 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 		// debug print data
 		if( log_level_active(LOG_LEVEL_TRACE) )
 		{
-			char str[BUFSIZ];
-			int str_len = 0;
-			str_len += snprintf((str + str_len), BUFSIZ, "read %zdB: ", (data_len * CAPTURE_DATA_SIZE));
+			logf_trace("read %zdB: ", (data_len * CAPTURE_DATA_SIZE));
 			for( size_t i=0; i<data_len; i++ )
 			{
 				if( i != 0 )
 				{
-					str_len += snprintf((str + str_len), (BUFSIZ - str_len), ".");
+					logf_append_trace("%s", ".");
 				}
-				str_len += snprintf((str + str_len), (BUFSIZ - str_len), "%016"PRIx64, data[i]);
+				logf_append_trace("%016"PRIx64, data[i]);
 			}
-			snprintf((str + str_len), (BUFSIZ - str_len), "\n");
-			logf_trace("%s", str);
+			logf_append_trace("%s", "\n");
 		}
 
 		// process
