@@ -30,7 +30,8 @@ static int PCAP_NETWORK = PCAP_NETWORK_ETHERNET;
 static int PCAP_SNAPLEN = 65535;
 
 static int SERVER_PORT = 2511;
-static int CAPTURE_DATA_SIZE = 256 / 8;
+static size_t CAPTURE_DATA_SIZE = 256 / 8;
+static size_t DATA_SLOTS = 512;
 
 static const char* DFE_LOCAL_STR = "Local";
 static const int PACKET_COUNT_INTERVAL = 1;
@@ -217,14 +218,9 @@ static void init_server_capture( max_engine_t * engine,
 static int local_read_loop( max_engine_t* engine, FILE* file )
 {
 	int error;
-	int frames_len = 2;
-	int data_size = CAPTURE_DATA_SIZE * frames_len;
 
 	pcap_t* pcap = pcap_init(file, PCAP_TZONE, PCAP_NETWORK, PCAP_SIGFIGS, PCAP_SNAPLEN);
 	assert(pcap != NULL);
-
-	// disable pcie timeout
-	max_config_set_int64(MAX_CONFIG_PCIE_TIMEOUT, 0);
 
 	// start stats reporting thread
 	stats_t stats = {0, 0, 0};
@@ -246,30 +242,44 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 		}
 	}
 
+	// enable local capture
+	CaptureClient_enableLocalCapture_actions_t action;
+	CaptureClient_enableLocalCapture_run(engine, &action);
+
 	// service
 	pcap_packet_t* packet = NULL;
 	int sof_expected = 1;
 
-	uint64_t* data = malloc(data_size);
-	assert(data != NULL);
+	uint64_t* data_buffer;
+	posix_memalign((void*) &data_buffer, CAPTURE_DATA_SIZE, (DATA_SLOTS * CAPTURE_DATA_SIZE));
+	assert(data_buffer != NULL);
+	max_llstream_t* stream = max_llstream_setup(engine, "toCpu", DATA_SLOTS, CAPTURE_DATA_SIZE, data_buffer);
 
 	while( 1 )
 	{
-		logf_debug("Reading %d frames (%dB)\n\n", frames_len, data_size);
+		uint64_t* data;
 
-		CaptureClient_readCaptureData_actions_t action = {
-			.param_len = frames_len,
-			.outstream_toCpu = data,
-		};
-		CaptureClient_readCaptureData_run(engine, &action);
+		// check for data
+		ssize_t status = 0;
+		while( status <= 0 )
+		{
+			status = max_llstream_read(stream, DATA_SLOTS, (void**) &data);
+			if( status < 0 )
+			{ // error
+				fprintf(stderr, "Error: Unable to read llstream\n");
+				return 1;
+			}
+		}
+		size_t data_len = (size_t) status;
+
+		logf_debug("Read %zd frames\n\n", data_len);
 
 		// debug print data
 		if( log_level_active(LOG_LEVEL_TRACE) )
 		{
-			size_t data_len = data_size / sizeof(*data);
 			char str[BUFSIZ];
 			int str_len = 0;
-			str_len += snprintf((str + str_len), BUFSIZ, "read %dB: ", data_size);
+			str_len += snprintf((str + str_len), BUFSIZ, "read %zdB: ", (data_len * CAPTURE_DATA_SIZE));
 			for( size_t i=0; i<data_len; i++ )
 			{
 				if( i != 0 )
@@ -282,15 +292,18 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 			logf_trace("%s", str);
 		}
 
-		// process frames
-		for( int i=0; i<frames_len; i++ )
+		// process
+		assert(CAPTURE_DATA_SIZE % sizeof(*data) == 0);
+		assert(CAPTURE_DATA_SIZE > 0);
+		int index_step = (CAPTURE_DATA_SIZE / sizeof(*data));
+
+		for( size_t i=0; i<data_len; i++ )
 		{
-			stats_local.frames++;
+			int index = (index_step * i);
 
 			// debug print frame data
-			logf_debug("[frame = %d]\n", i);
+			logf_debug("[frame = %zd]\n", i);
 
-			int index = (4 * i);
 			capture_data_t* capture_data = capture_data_parse(&data[index]);
 			assert(capture_data != NULL);
 			timestamp_t* timestamp = capture_data_get_timestamp(capture_data);
@@ -341,8 +354,6 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 			int size = frame_get_size(frame);
 			pcap_packet_append(packet, data, size);
 
-			stats_local.bytes += size;
-
 			// write frame
 			if( eof )
 			{
@@ -354,11 +365,17 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 				packet = NULL;
 
 				sof_expected = 1;
-				stats_local.packets++;
 
 			}
 
-			// try and update stats
+			// update stats
+			stats_local.frames++;
+			stats_local.bytes += size;
+			if( eof )
+			{
+				stats_local.packets++;
+			}
+
 			error = pthread_mutex_trylock(&stats_mutex);
 			if( error )
 			{ // no lock
@@ -382,6 +399,7 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 			// cleanup
 			capture_data_free(capture_data);
 			capture_data = NULL;
+			max_llstream_read_discard(stream, 1);
 		}
 	}
 
@@ -400,8 +418,8 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 		packet = NULL;
 	}
 
-	free(data);
-	data = NULL;
+	free(data_buffer);
+	data_buffer = NULL;
 
 	return 0;
 }

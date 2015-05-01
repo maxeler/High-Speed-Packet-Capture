@@ -169,12 +169,7 @@ public class CaptureManager extends NetworkManager
 
 	public static EngineInterface createLocalInterface( Types types )
 	{
-		EngineInterface ei = new EngineInterface("readCaptureData");
-
-		InterfaceParam len = ei.addParam("len", CPUTypes.UINT64);
-		InterfaceParam size = len * (types.captureDataPaddedType.getTotalBits() / 8);
-
-		ei.setStream("toCpu", CPUTypes.UINT64, size);
+		EngineInterface ei = new EngineInterface("enableLocalCapture");
 
 		// enable routing of capture data to CPU
 		ei.route("fan -> cpu");
