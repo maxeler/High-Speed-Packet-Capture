@@ -100,11 +100,11 @@ $(RUNRULE_DIR)/objects/cpp/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CFLAGS) -c $< -o $@
 
-$(RUNRULE_DIR)/binaries/$(TARGET_EXEC): $(OBJ)
+$(RUNRULE_DIR)/binaries/$(TARGET_EXEC): $(OBJ) $(LIB_COMMON)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-$(RUNRULE_DIR)/binaries/$(TARGET_LIBRARY): $(OBJ)
+$(RUNRULE_DIR)/binaries/$(TARGET_LIBRARY): $(OBJ) $(LIB_COMMON)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -shared -o $@ $^ $(LDFLAGS)
 
