@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <argp.h>
+#include <pthread.h>
 
 #include "Maxfiles.h"
 #include "MaxSLiCInterface.h"
@@ -21,7 +22,7 @@
 #include "log.h"
 #include "utils.h"
 #include "args.h"
-#include "pthread.h"
+#include "stats.h"
 
 
 static int PCAP_TZONE = PCAP_TZONE_UTC;
@@ -34,20 +35,6 @@ static size_t CAPTURE_DATA_SIZE = 256 / 8;
 static size_t DATA_SLOTS = 512;
 
 static const char* DFE_LOCAL_STR = "Local";
-static const int PACKET_COUNT_INTERVAL = 1;
-
-typedef struct
-{
-	size_t packets;
-	size_t frames;
-        size_t bytes;
-} stats_t;
-
-typedef struct
-{
-	stats_t* stats;
-	pthread_mutex_t* mutex;
-} stats_args_t;
 
 static void init_server_capture( max_engine_t * engine,
 								 max_net_connection_t dfe_if,
@@ -59,8 +46,6 @@ static void init_server_capture( max_engine_t * engine,
 								 int ipsB_len);
 
 static int local_read_loop( max_engine_t* engine, FILE* file );
-
-void* report_stats( void* arg );
 
 int main( int argc, char** argv )
 {
@@ -217,24 +202,19 @@ static void init_server_capture( max_engine_t * engine,
 
 static int local_read_loop( max_engine_t* engine, FILE* file )
 {
-	int error;
-
 	pcap_t* pcap = pcap_init(file, PCAP_TZONE, PCAP_NETWORK, PCAP_SIGFIGS, PCAP_SNAPLEN);
 	assert(pcap != NULL);
 
 	// start stats reporting thread
-	stats_t stats = {0, 0, 0};
-	stats_t stats_local = {0, 0, 0};
-	pthread_mutex_t stats_mutex = PTHREAD_MUTEX_INITIALIZER;
+	sstats_t* sstats = sstats_init();
+	stats_t stats = STATS_RESET;
 	pthread_t* thread = NULL;
 	if( log_level_active(LOG_LEVEL_INFO) )
 	{
-		stats_args_t args = {&stats, &stats_mutex};
-
 		thread = malloc(sizeof(&thread));
 		assert(thread != NULL);
 
-		int error = pthread_create(thread, NULL, report_stats, (void*) &args);
+		int error = pthread_create(thread, NULL, report_stats, (void*) sstats);
 		if( error )
 		{
 			fprintf(stderr, "Error: Unable to create thread\n");
@@ -366,32 +346,14 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 			}
 
 			// update stats
-			stats_local.frames++;
-			stats_local.bytes += size;
+			stats.frames++;
+			stats.bytes += size;
 			if( eof )
 			{
-				stats_local.packets++;
+				stats.packets++;
 			}
-
-			error = pthread_mutex_trylock(&stats_mutex);
-			if( error )
-			{ // no lock
-				if( error != EBUSY )
-				{
-					return 1;
-				}
-			}
-			else // !error
-			{ // locked
-				// update
-				stats = stats_local;
-
-				error = pthread_mutex_unlock(&stats_mutex);
-				if( error )
-				{
-					return 1;
-				}
-			}
+			sstats_inc(sstats, &stats);
+			sstats_try_update(sstats);
 
 			// cleanup
 			capture_data_free(capture_data);
@@ -410,6 +372,9 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 		thread = NULL;
 	}
 
+	sstats_free(sstats);
+	sstats = NULL;
+
 	if( packet != NULL )
 	{
 		pcap_packet_free(packet);
@@ -426,39 +391,4 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 	data_buffer = NULL;
 
 	return 0;
-}
-
-void* report_stats( void* _args )
-{
-	stats_args_t* args = (stats_args_t*) _args;
-	stats_t stats_prev = {0, 0, 0};
-	int first_pass = 1;
-
-	while( 1 )
-	{
-		pthread_mutex_lock(args->mutex);
-		stats_t stats = *args->stats;
-		pthread_mutex_unlock(args->mutex);
-
-		int stats_updated = stats_prev.frames != stats.frames;
-		stats_prev = stats;
-
-		if( first_pass || stats_updated )
-		{
-			logf_info("Total: %zd packets (%zd frames, %zdB)\n", stats.packets, stats.frames, stats.bytes);
-		}
-
-		if( first_pass )
-		{
-			first_pass = 0;
-		}
-
-		int rem = PACKET_COUNT_INTERVAL;
-		while( rem != 0 )
-		{
-			rem = sleep(1);
-		}
-	}
-
-	return NULL;
 }

@@ -5,6 +5,9 @@
 #ifndef LOG_H_
 #define LOG_H_
 
+#include <stdio.h>
+
+
 extern const char* g_log_prepend;
 extern int g_log_level;
 
