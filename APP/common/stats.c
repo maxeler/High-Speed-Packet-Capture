@@ -30,7 +30,7 @@ sstats_t* sstats_init( )
 		return NULL;
 	}
 
-	this->mutex = malloc(sizeof(this->mutex));
+	this->mutex = malloc(sizeof(*this->mutex));
 	if( this->mutex == NULL )
 	{
 		sstats_free(this);
