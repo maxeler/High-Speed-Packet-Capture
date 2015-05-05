@@ -349,6 +349,7 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 			stats.frames = 1;
 			stats.bytes = size;
 			stats.packets = (eof == 1) ? 1 : 0;
+
 			sstats_inc(sstats, &stats);
 			sstats_try_update(sstats);
 
