@@ -207,11 +207,10 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 
 	// start stats reporting thread
 	sstats_t* sstats = sstats_init();
-	stats_t stats = STATS_RESET;
 	pthread_t* thread = NULL;
 	if( log_level_active(LOG_LEVEL_INFO) )
 	{
-		thread = malloc(sizeof(&thread));
+		thread = malloc(sizeof(*thread));
 		assert(thread != NULL);
 
 		int error = pthread_create(thread, NULL, report_stats, (void*) sstats);
@@ -346,12 +345,10 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 			}
 
 			// update stats
-			stats.frames++;
-			stats.bytes += size;
-			if( eof )
-			{
-				stats.packets++;
-			}
+			stats_t stats = STATS_RESET;
+			stats.frames = 1;
+			stats.bytes = size;
+			stats.packets = (eof == 1) ? 1 : 0;
 			sstats_inc(sstats, &stats);
 			sstats_try_update(sstats);
 
@@ -368,6 +365,7 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 	if( thread != NULL )
 	{
 		pthread_cancel(*thread);
+
 		free(thread);
 		thread = NULL;
 	}
