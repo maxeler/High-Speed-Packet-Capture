@@ -4,7 +4,7 @@ LIB_COMMON_DIR := $(dir $(LIB_COMMON))
 DEFINE_FLAGS :=
 BUILD_FLAGS := -Wall -Werror -pedantic -std=gnu99 -fgnu89-inline
 DEBUG_FLAGS := -g
-LIB_FLAGS := -L$(LIB_COMMON_DIR) -lm -lcommon
+LIB_FLAGS := -L$(LIB_COMMON_DIR) -lm -lcommon -pthread
 CFLAGS := $(DEBUG_FLAGS) $(BUILD_FLAGS) $(DEFINE_FLAGS) -I. -I$(LIB_COMMON_DIR) $(LIB_FLAGS)
 OBJ_DIR := .objects
 

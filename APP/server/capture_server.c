@@ -21,11 +21,13 @@
 #include <signal.h>
 #include <sys/select.h>
 #include <argp.h>
+#include <pthread.h>
 
 #include "pcap.h"
 #include "log.h"
 #include "capture_data.h"
 #include "args.h"
+#include "stats.h"
 
 
 enum read_mode_e
@@ -149,8 +151,10 @@ int main( int argc, char* argv[] )
 	pcap_flush(pcap);
 	pcap_free(pcap);
 	pcap = NULL;
+
 	fclose(arguments.capture_file);
 	arguments.capture_file = NULL;
+
 	free(server_ip_str);
 	server_ip_str = NULL;
 
@@ -162,7 +166,6 @@ static int handle_client( pcap_t* pcap, int con_fd )
 	int buffer_size = fmax(HEADER_SIZE, DATA_SIZE_MAX);
 	uint64_t* buffer = malloc(buffer_size);
 
-	size_t packets_count = 0; // note: may overflow
 	size_t read_size = HEADER_SIZE;
 	enum read_mode_e read_mode = READ_MODE_HEADER;
 	frame_t frame;
@@ -179,6 +182,22 @@ static int handle_client( pcap_t* pcap, int con_fd )
 	sigemptyset(&exit_action.sa_mask);
 	sigaction(SIGINT, &exit_action, NULL);
 	sigaction(SIGTERM, &exit_action, NULL);
+
+	// start stats reporting thread
+	sstats_t* sstats = sstats_init();
+	pthread_t* thread = NULL;
+	if( log_level_active(LOG_LEVEL_INFO) )
+	{
+		thread = malloc(sizeof(*thread));
+		assert(thread != NULL);
+
+		int error = pthread_create(thread, NULL, report_stats, (void*) sstats);
+		if( error )
+		{
+			fprintf(stderr, "Error: Unable to create thread\n");
+			return 1;
+		}
+	}
 
 	// service socket
 	pcap_packet_t* packet = NULL;
@@ -219,13 +238,6 @@ static int handle_client( pcap_t* pcap, int con_fd )
 				read_mode = READ_MODE_DATA;
 				read_size = DATA_TIMESTAMP_SIZE + frame_get_size(capture_data.frame);
 
-				// report stats
-				if( frame.eof )
-				{
-					packets_count++;
-					logf_info("Total packets: %zd\n", packets_count);
-				}
-
 				break;
 			}
 			case READ_MODE_DATA:
@@ -235,6 +247,7 @@ static int handle_client( pcap_t* pcap, int con_fd )
 
 				frame_t* frame = capture_data.frame;
 				timestamp_t* timestamp = capture_data.timestamp;
+				size_t size = frame_get_size(frame);
 
 				// sof
 				assert(sof_expected == frame->sof);
@@ -247,18 +260,28 @@ static int handle_client( pcap_t* pcap, int con_fd )
 				}
 
 				// append
-				pcap_packet_append(packet, frame_get_data(frame), frame_get_size(frame));
+				pcap_packet_append(packet, frame_get_data(frame), size);
 
 				// eof
 				if( frame->eof )
 				{
 					pcap_packet_write(pcap, packet);
 					pcap_flush(pcap);
+
 					pcap_packet_free(packet);
 					packet = NULL;
 
 					sof_expected = 1;
 				}
+
+				// update stats
+				stats_t stats = STATS_RESET;
+				stats.frames = 1;
+				stats.bytes = size;
+				stats.packets = (frame->eof == 1) ? 1 : 0;
+
+				sstats_inc(sstats, &stats);
+				sstats_try_update(sstats);
 
 				// config next mode
 				read_mode = READ_MODE_HEADER;
@@ -277,8 +300,12 @@ static int handle_client( pcap_t* pcap, int con_fd )
 		packet = NULL;
 	}
 	packet = NULL;
+
 	free(buffer);
 	buffer = NULL;
+
+	sstats_free(sstats);
+	sstats = NULL;
 
 	return 0;
 }
