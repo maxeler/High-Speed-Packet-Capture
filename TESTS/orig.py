@@ -79,7 +79,7 @@ class TestCapture(unittest.TestCase):
         sendp(IP(), iface=iface, verbose=False)
         process.poll()
 
-        # verify capture CAPTURE_FILE
+        # verify capture file
         for packet in rdpcap(CAPTURE_FILE):
             record.add_received(packet)
         self.assertTrue(record.verify())

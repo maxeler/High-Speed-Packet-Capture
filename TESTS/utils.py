@@ -7,6 +7,7 @@ from threading import Thread
 from Queue import Queue
 import os
 from hashlib import md5
+import time
 
 
 DEV_NULL = open(os.devnull, 'w')
@@ -54,12 +55,33 @@ def make_sim_env(sim_name):
     return env
 
 
-def lookup_interface_from_addr(ip):
+def interface_from_addr(ip):
     out, err = check_output(['ip', '-o', 'addr', 'show'])
     for line in out.split('\n'):
         if ip in line:
             return line.split(' ')[1]
     return None
+
+
+def try_exit(fn):
+    try:
+        fn()
+    except OSError as e:
+        if e.errno == 3: # no such process
+            # ignore already exited process
+            pass
+        else:
+            raise e
+
+def try_safe_exits(processes, timeout=1):
+    # terminate
+    for process in processes:
+        try_exit(process.terminate)
+    # wait
+    time.sleep(timeout)
+    # kill
+    for process in processes:
+        try_exit(process.kill)
 
 
 class StreamReaderNB(object):
@@ -115,14 +137,14 @@ class PacketRecord(object):
         self.__add(self.received_items, packet)
 
     def verify(self):
-        # sort
+        # sort so we can do O(n) comparisons for a total cost of O(nlogn)
         received_items = sorted(self.received_items)
         sent_items = sorted(self.sent_items)
 
-        # check
+        # select check fn
         if self.ignore_zero_padding:
             def check(sent, received):
-                # note: maxethsimd is unfortuantely padding some data with zeros
+                # check for match from start and ignore remaining data if all 0s
                 if sent == received[:len(sent)]:
                     # ensure remaining data is all zeros
                     j = len(sent_item)
@@ -135,6 +157,7 @@ class PacketRecord(object):
             def check(sent, received):
                 return sent == received
 
+        # check
         i = 0
         for sent_item in sent_items:
             found = False

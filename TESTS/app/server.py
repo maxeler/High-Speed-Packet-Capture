@@ -10,7 +10,7 @@ from scapy.all import Ether, IP, ICMP, sendp
 from hashlib import md5
 
 from utils import list_extend, check_output, make_sim_env, StreamReaderNB, DEV_NULL, \
-    lookup_interface_from_addr, PacketRecord
+    interface_from_addr, PacketRecord, try_safe_exits
 from pcap_reader import rdpcap
 from app.settings import *
 
@@ -56,27 +56,16 @@ class TestCapture(unittest.TestCase):
         time.sleep(1)
 
         # add server ips to sim tap
-        self.server_iface = lookup_interface_from_addr(DFE_SERVER_PORT_IP)
+        self.server_iface = interface_from_addr(DFE_SERVER_PORT_IP)
         for group in SERVER_IPS.keys():
             for i in range(len(SERVER_IPS[group])):
                 ip = SERVER_IPS[group][i]
                 check_call(['ip', 'addr', 'add', ip, 'broadcast', SERVER_NETMASK, 'dev', self.server_iface])
 
-        self.capture_iface = lookup_interface_from_addr(DFE_CAPTURE_PORT_IP)
+        self.capture_iface = interface_from_addr(DFE_CAPTURE_PORT_IP)
 
     def tearDown(self):
-        def kill(process):
-            try:
-                process.terminate()
-            except OSError as e:
-                if e.errno == 3: # no such process
-                    pass
-                else:
-                    raise e
-
-        for process in self.processes:
-            kill(process)
-
+        try_safe_exits(self.processes)
         for process in self.processes:
             process.wait()
 
@@ -108,12 +97,12 @@ class TestCapture(unittest.TestCase):
         self.processes.append(client)
 
         # send packets
-        # broadcast
+        # eth broadcast
         for i in range(PACKET_COUNT):
             packet = Ether(dst='FF:FF:FF:FF:FF:FF')/IP(dst='127.0.0.2')/ICMP()
             sendp(packet, iface=self.capture_iface, verbose=False)
             group_record['A'].add_sent(packet)
-        # non-broadcast
+        # eth non-broadcast
         send_data = []
         for i in range(PACKET_COUNT):
             packet = Ether(dst='AA:AA:AA:AA:AA:AA')/IP(dst='127.0.0.2')/ICMP()
