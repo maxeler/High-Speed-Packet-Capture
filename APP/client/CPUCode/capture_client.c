@@ -119,7 +119,9 @@ int main( int argc, char** argv )
 	// cleanup
 	max_unload(engine);
 	engine = NULL;
+
 	CaptureClient_free();
+
 	free(dfe_ip_str);
 	dfe_ip_str = NULL;
 
@@ -205,8 +207,10 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 	pcap_t* pcap = pcap_init(file, PCAP_TZONE, PCAP_NETWORK, PCAP_SIGFIGS, PCAP_SNAPLEN);
 	assert(pcap != NULL);
 
-	// start stats reporting thread
 	sstats_t* sstats = sstats_init();
+	assert(sstats != NULL);
+
+	// start stats reporting thread
 	pthread_t* thread = NULL;
 	if( log_level_active(LOG_LEVEL_INFO) )
 	{
@@ -253,7 +257,7 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 
 		logf_debug("Read %zd frames\n\n", data_len);
 
-		// debug print data
+		// debug print received data
 		if( log_level_active(LOG_LEVEL_TRACE) )
 		{
 			logf_trace("read %zdB: ", (data_len * CAPTURE_DATA_SIZE));
@@ -275,7 +279,7 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 
 		for( size_t i=0; i<data_len; i++ )
 		{
-			int index = (index_step * i);
+			int index = index_step * i;
 
 			// debug print frame data
 			logf_debug("[frame = %zd]\n", i);
@@ -305,21 +309,26 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 
 			if( sof )
 			{
-				uint64_t packet_timestamp;
+				uint64_t seconds;
+				uint64_t nanoseconds;
+
 				if( timestamp_is_valid(timestamp) )
 				{
-					packet_timestamp = timestamp_get_value(timestamp);
+					seconds = timestamp_get_seconds(timestamp);
+					nanoseconds = timestamp_get_nanoseconds(timestamp);
 				}
-				else
+				else // !timestamp_is_valid(timestamp)
 				{
 					logf_info("WARNING: Using system time due to invalid dfe timestamp (doubt=%d, valid=%d, value=%"PRIu64")\n",
 							  timestamp_get_doubt(timestamp),
 							  timestamp_is_valid(timestamp),
 							  timestamp_get_value(timestamp));
-					packet_timestamp = time(NULL);
+
+					seconds = time(NULL);
+					nanoseconds = 0;
 				}
 
-				packet = pcap_packet_init(pcap, timestamp_get_seconds(timestamp), timestamp_get_nanoseconds(timestamp));
+				packet = pcap_packet_init(pcap, seconds, nanoseconds);
 				assert(packet != NULL);
 
 				sof_expected = 0;
@@ -356,6 +365,7 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 			// cleanup
 			capture_data_free(capture_data);
 			capture_data = NULL;
+
 			max_llstream_read_discard(stream, 1);
 		}
 	}
@@ -382,9 +392,6 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 
 	max_llstream_release(stream);
 	stream = NULL;
-
-	free(data_buffer);
-	data_buffer = NULL;
 
 	free(data_buffer);
 	data_buffer = NULL;
