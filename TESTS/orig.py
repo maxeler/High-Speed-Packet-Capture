@@ -1,20 +1,26 @@
-from subprocess import check_call, Popen, PIPE, CalledProcessError
+"""
+Tests for ORIG
+"""
+
+from subprocess import Popen, CalledProcessError
 import unittest
 from pytun import TunTapDevice, IFF_TAP
 import time
 from scapy.all import IP, ICMP, sendp, rdpcap
 from hashlib import md5
-import os
 
-from utils import list_extend, check_output, DEV_NULL
+from utils import check_output, DEV_NULL, PacketRecord
 
 APP = '../ORIG/capture'
 TAP_NAME = 'tap_captest'
-TAP_BAD_NAME = 'BADTAPNAME' # this should not exist
 CAPTURE_FILE = 'capture.pcap'
+PACKET_COUNT = 255
 
 
 class TestArgs(unittest.TestCase):
+    """
+    Sanity checks application arguments.
+    """
 
     def _testArgsException(self, args):
         try:
@@ -37,6 +43,10 @@ class TestArgs(unittest.TestCase):
 
 
 class TestCapture(unittest.TestCase):
+    """
+    Sends a series of test packets, ensures they appear in the capture file, and checks that
+    nothing fatal happened along the way.
+    """
 
     def setUp(self):
         tap = TunTapDevice(name=TAP_NAME, flags=IFF_TAP)
@@ -46,20 +56,19 @@ class TestCapture(unittest.TestCase):
     def tearDown(self):
         self.tap.down()
         self.tap.close()
-        
+
     def testBasic(self):
         iface = self.tap.name
+        record = PacketRecord()
 
         # start capture
         process = Popen([APP, iface, CAPTURE_FILE], stdout=DEV_NULL, stderr=DEV_NULL)
 
         # send packets
-        send_hashes = []
-        for i in range(0, 255):
+        for i in range(PACKET_COUNT):
             packet = IP(dst="www.google.com")/ICMP()
             sendp(packet, iface=iface, verbose=False)
-            hash = md5(packet.build()).digest()
-            send_hashes.append(hash)
+            record.add_sent(packet)
 
         # wait for stragglers
         time.sleep(1)
@@ -71,18 +80,9 @@ class TestCapture(unittest.TestCase):
         process.poll()
 
         # verify capture CAPTURE_FILE
-        pcap = rdpcap(CAPTURE_FILE)
-        recv_hashes = sorted([md5(p.build()).digest() for p in pcap])
-        send_hashes = sorted(send_hashes)
-        i = 0
-        for hash in send_hashes:
-            found = False
-            while i<len(recv_hashes):
-                if hash == recv_hashes[i]:
-                    found = True
-                    break
-                i += 1
-            self.assertTrue(found)
+        for packet in rdpcap(CAPTURE_FILE):
+            record.add_received(packet)
+        self.assertTrue(record.verify())
 
 
 def make_suite():
@@ -93,7 +93,6 @@ def make_suite():
     return ts
 
 suite = make_suite()
-        
+
 if __name__ == '__main__':
     unittest.main()
-

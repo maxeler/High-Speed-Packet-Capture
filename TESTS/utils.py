@@ -1,7 +1,12 @@
-from subprocess import check_call, Popen, PIPE, CalledProcessError
+"""
+Miscellaneous utility functions and classes.
+"""
+
+from subprocess import Popen, PIPE, CalledProcessError
 from threading import Thread
 from Queue import Queue
 import os
+from hashlib import md5
 
 
 DEV_NULL = open(os.devnull, 'w')
@@ -33,17 +38,17 @@ def check_output(run_args, *args, **kwargs):
 def make_sim_env(sim_name):
     env = os.environ.copy()
 
-    maxcompilerDir = env.get('MAXCOMPILERDIR', '')
-    if not os.path.exists(maxcompilerDir):
-        raise EnvironmentError('MAXCOMPILERDIR not exist: %s' % maxcompilerDir)
+    maxcompiler_dir = env.get('MAXCOMPILERDIR', '')
+    if not os.path.exists(maxcompiler_dir):
+        raise EnvironmentError('MAXCOMPILERDIR not exist: %s' % maxcompiler_dir)
 
-    maxelerosSimDir = os.path.join(maxcompilerDir, 'lib', 'maxeleros-sim')
-    simLib = os.path.join(maxelerosSimDir, 'lib', 'libmaxeleros.so')
-    if not os.path.exists(simLib):
-        raise EnvironmentError('Maxeleros Simulation Library does not exist: %s' % simLib)
+    maxeleros_sim_dir = os.path.join(maxcompiler_dir, 'lib', 'maxeleros-sim')
+    sim_lib = os.path.join(maxeleros_sim_dir, 'lib', 'libmaxeleros.so')
+    if not os.path.exists(sim_lib):
+        raise EnvironmentError('Maxeleros Simulation Library does not exist: %s' % sim_lib)
 
-    env['MAXELEROSDIR'] = maxelerosSimDir
-    env['LD_PRELOAD'] = '%s:%s' % (simLib, env.get('LD_PRELOAD', ''))
+    env['MAXELEROSDIR'] = maxeleros_sim_dir
+    env['LD_PRELOAD'] = '%s:%s' % (sim_lib, env.get('LD_PRELOAD', ''))
     env['SLIC_CONF'] = '%s;use_simulation=%s' % (env.get('SLIC_CONF', ''), sim_name)
 
     return env
@@ -81,7 +86,64 @@ class StreamReaderNB(object):
     def get_queue(self):
         return self.queue
 
-    def stop(block=True):
+    def stop(self, block=True):
         self.thread_stop = True
         if block:
             self.thread.join()
+
+
+class PacketRecord(object):
+
+    def __init__(self, ignore_zero_padding=False):
+        self.should_hash = not ignore_zero_padding
+        self.ignore_zero_padding = ignore_zero_padding
+        self.sent_items = []
+        self.received_items = []
+
+    def __add(self, items, packet):
+        raw = packet.build()
+        if self.should_hash:
+            item = md5(raw).digest()
+        else:
+            item = raw
+        items.append(item)
+
+    def add_sent(self, packet):
+        self.__add(self.sent_items, packet)
+
+    def add_received(self, packet):
+        self.__add(self.received_items, packet)
+
+    def verify(self):
+        # sort
+        received_items = sorted(self.received_items)
+        sent_items = sorted(self.sent_items)
+
+        # check
+        if self.ignore_zero_padding:
+            def check(sent, received):
+                # note: maxethsimd is unfortuantely padding some data with zeros
+                if sent == received[:len(sent)]:
+                    # ensure remaining data is all zeros
+                    j = len(sent_item)
+                    while j < len(received) and 0 == ord(received[j]):
+                        j += 1
+                    if j == len(received):
+                        return True
+                return False
+        else:
+            def check(sent, received):
+                return sent == received
+
+        i = 0
+        for sent_item in sent_items:
+            found = False
+            while i < len(received_items):
+                received_item = received_items[i]
+                if check(sent_item, received_item):
+                    found = True
+                    break
+                i += 1
+            if not found:
+                return False
+        return True

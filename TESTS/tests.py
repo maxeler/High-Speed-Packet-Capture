@@ -1,19 +1,32 @@
+"""
+Runs tests.
+"""
+
+import os
+
 import unittest
 import orig
 import app
 
 
-if __name__ == '__main__':
-    runner = unittest.TextTestRunner(verbosity=2)
-    
-    import os
+def run():
+    """
+    Runs ORIG and APP tests.
+    """
+
+    # create test suite
+    ts = unittest.TestSuite()
+    ts.addTest(orig.suite)
+    ts.addTest(app.client.suite)
+    ts.addTest(app.server.suite)
+
+    # kill children if parent fails
     os.setpgrp()
-    
-    print '[ORIG]'
-    runner.run(orig.suite)
-    print '[APP.client.simulation]'
-    runner.run(app.client.suite)
-    print '[APP.server]'
-    runner.run(app.server.suite)
-    print '[APP.clientserver]'
-    runner.run(app.clientserver.suite)
+
+	# run
+    runner = unittest.TextTestRunner(verbosity=2)
+    runner.run(ts)
+
+
+if __name__ == '__main__':
+    run()
