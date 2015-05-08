@@ -6,11 +6,13 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include "stats.h"
 #include "log.h"
 
 
+const stats_t STATS_RESET = {0, 0, 0};
 static const int REPORT_STATS_INTERVAL_S = 1;
 
 struct sstats_s
@@ -19,8 +21,6 @@ struct sstats_s
 	stats_t stats;
 	stats_t stats_shared;
 };
-
-const stats_t STATS_RESET = {0, 0, 0};
 
 sstats_t* sstats_init( )
 {
@@ -34,15 +34,20 @@ sstats_t* sstats_init( )
 	if( this->mutex == NULL )
 	{
 		sstats_free(this);
+		this = NULL;
+
 		return NULL;
 	}
 
 	int error = pthread_mutex_init(this->mutex, NULL);
 	if( error )
 	{
+		free(this->mutex);
 		this->mutex = NULL;
 
 		sstats_free(this);
+		this = NULL;
+
 		return NULL;
 	}
 
@@ -54,6 +59,8 @@ sstats_t* sstats_init( )
 
 void sstats_free( sstats_t* this )
 {
+	assert(this != NULL);
+
 	if( this->mutex != NULL )
 	{
 		pthread_mutex_destroy(this->mutex);
@@ -66,15 +73,20 @@ void sstats_free( sstats_t* this )
 	this = NULL;
 }
 
-void sstats_inc( sstats_t* sstats, stats_t* stats )
+void sstats_inc( sstats_t* this, stats_t* stats )
 {
-	sstats->stats.bytes += stats->bytes;
-	sstats->stats.frames += stats->frames;
-	sstats->stats.packets += stats->packets;
+	assert(this != NULL);
+	assert(stats != NULL);
+
+	this->stats.bytes += stats->bytes;
+	this->stats.frames += stats->frames;
+	this->stats.packets += stats->packets;
 }
 
 void sstats_update( sstats_t* this )
 {
+	assert(this != NULL);
+
 	pthread_mutex_lock(this->mutex);
 	this->stats_shared = this->stats;
 	pthread_mutex_unlock(this->mutex);
@@ -82,6 +94,8 @@ void sstats_update( sstats_t* this )
 
 int sstats_try_update( sstats_t* this )
 {
+	assert(this != NULL);
+
 	int error = pthread_mutex_trylock(this->mutex);
 	if( error )
 	{ // no lock
@@ -100,6 +114,9 @@ int sstats_try_update( sstats_t* this )
 
 void sstats_get( sstats_t* this, stats_t* stats )
 {
+	assert(this != NULL);
+	assert(stats != NULL);
+
 	pthread_mutex_lock(this->mutex);
 	*stats = this->stats_shared;
 	pthread_mutex_unlock(this->mutex);
@@ -107,6 +124,8 @@ void sstats_get( sstats_t* this, stats_t* stats )
 
 void* report_stats( void* _sstats )
 {
+	assert(_sstats != NULL);
+
 	sstats_t* sstats = (sstats_t*) _sstats;
 	stats_t stats_prev = STATS_RESET;
 	int first_pass = 1;

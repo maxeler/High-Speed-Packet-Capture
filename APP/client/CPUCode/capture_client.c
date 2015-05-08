@@ -1,5 +1,5 @@
 /*
- * CaptureClient.c
+ * capture_client.c
  */
 
 #include <inttypes.h>
@@ -257,20 +257,8 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 
 		logf_debug("Read %zd frames\n\n", data_len);
 
-		// debug print received data
-		if( log_level_active(LOG_LEVEL_TRACE) )
-		{
-			logf_trace("read %zdB: ", (data_len * CAPTURE_DATA_SIZE));
-			for( size_t i=0; i<data_len; i++ )
-			{
-				if( i != 0 )
-				{
-					logf_append_trace("%s", ".");
-				}
-				logf_append_trace("%016"PRIx64, data[i]);
-			}
-			logf_append_trace("%s", "\n");
-		}
+		log_trace("data ");
+		log_binary_append(LOG_LEVEL_TRACE, data, (data_len * CAPTURE_DATA_SIZE));
 
 		// process
 		assert(CAPTURE_DATA_SIZE % sizeof(*data) == 0);
@@ -350,7 +338,6 @@ static int local_read_loop( max_engine_t* engine, FILE* file )
 				packet = NULL;
 
 				sof_expected = 1;
-
 			}
 
 			// update stats

@@ -8,6 +8,7 @@
 
 #include <inttypes.h>
 
+
 typedef struct sstats_s sstats_t;
 
 typedef struct stats_s
@@ -44,7 +45,7 @@ int sstats_try_update( sstats_t* sstats );
 /*
  * Returns a copy of the synchronized stats.
  */
-void sstats_get( sstats_t* this, stats_t* stats );
+void sstats_get( sstats_t* sstats, stats_t* stats );
 
 void* report_stats( void* arg );
 

@@ -1,6 +1,5 @@
 /*
  * capture_server.c
- *
  */
 
 #include <stdlib.h>
@@ -36,14 +35,13 @@ enum read_mode_e
 	READ_MODE_DATA,
 };
 
-
 static int PCAP_TZONE = PCAP_TZONE_UTC;
 static int PCAP_SIGFIGS = 0;
 static int PCAP_NETWORK = PCAP_NETWORK_ETHERNET;
 static int PCAP_SNAPLEN = 65535;
 
 static const int PORT = 2511;
-static const int NUM_CONECTIONS = 1;
+static const int NUM_CONNECTIONS = 1;
 static const int HEADER_SIZE = 1;
 static const int DATA_TIMESTAMP_SIZE = 8;
 static const int DATA_FRAME_SIZE_MAX = 8;
@@ -51,19 +49,17 @@ static const int DATA_FRAME_SIZE_MAX = 8;
 
 volatile sig_atomic_t g_shutdown = 0;
 
-void handle_exit( int sig );
+static void handle_exit( int sig );
 
 static void report_errno( const char* msg, int errnum );
 
-void parse_header( capture_data_t* data, uint64_t buffer[1] );
+static void parse_header( capture_data_t* data, uint64_t* buffer );
 
-void parse_data( capture_data_t* data, uint64_t buffer[1] );
+static void parse_data( capture_data_t* data, uint64_t* buffer );
 
 static int handle_client( pcap_t* pcap, int conh );
 
-static int read_data( int fd, void* buffer, ssize_t read_size );
-
-static void print_data( uint8_t* buffer, size_t buffer_size );
+static int read_data( int fd, void* buffer, size_t read_size );
 
 int main( int argc, char* argv[] )
 {
@@ -100,10 +96,11 @@ int main( int argc, char* argv[] )
 		return EXIT_FAILURE;
 	}
 
-	struct sockaddr_in addr = {0};
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(PORT);
-	addr.sin_addr = arguments.server_ip;
+	struct sockaddr_in addr = {
+		.sin_family = AF_INET,
+		.sin_port = htons(PORT),
+		.sin_addr = arguments.server_ip,
+	};
 
 	error = bind(sock_num, (const struct sockaddr*) &addr, sizeof(addr));
 	if( error )
@@ -112,7 +109,7 @@ int main( int argc, char* argv[] )
 		return EXIT_FAILURE;
 	}
 
-	error = listen(sock_num, NUM_CONECTIONS);
+	error = listen(sock_num, NUM_CONNECTIONS);
 	if( error )
 	{
 		report_errno("Unable to listen on socket", errno);
@@ -126,20 +123,19 @@ int main( int argc, char* argv[] )
 
 		struct sockaddr_in client_addr = {0};
 		size_t client_addr_size = sizeof(client_addr);
-		int con_fd = accept(sock_num, (struct sockaddr*) &client_addr, (socklen_t *) &client_addr_size);
-
-		if( con_fd == -1 )
+		int fd = accept(sock_num, (struct sockaddr*) &client_addr, (socklen_t *) &client_addr_size);
+		if( fd == -1 )
 		{ // error
 			report_errno("Unable to accept on socket", errno);
 		}
-		else
+		else // fd != -1
 		{ // new connection
 			char client_ip[INET_ADDRSTRLEN];
 			inet_ntop(AF_INET, &(client_addr.sin_addr), client_ip, INET_ADDRSTRLEN);
 			const int client_port = ntohs(client_addr.sin_port);
 			logf_info("Client connected from %s: %d.\n", client_ip, client_port);
 
-			int error = handle_client(pcap, con_fd);
+			int error = handle_client(pcap, fd);
 			if( error )
 			{
 				fprintf(stderr, "Error handling client\n");
@@ -161,19 +157,10 @@ int main( int argc, char* argv[] )
 	return EXIT_SUCCESS;
 }
 
-static int handle_client( pcap_t* pcap, int con_fd )
+static int handle_client( pcap_t* pcap, int fd )
 {
-	int buffer_size = fmax(HEADER_SIZE, DATA_SIZE_MAX);
-	uint64_t* buffer = malloc(buffer_size);
-
-	size_t read_size = HEADER_SIZE;
-	enum read_mode_e read_mode = READ_MODE_HEADER;
-	frame_t frame;
-	timestamp_t timestamp;
-	capture_data_t capture_data = {
-		.frame = &frame,
-		.timestamp = &timestamp,
-	};
+	sstats_t* sstats = sstats_init();
+	assert(sstats != NULL);
 
 	// register signal handler
 	struct sigaction exit_action;
@@ -184,7 +171,6 @@ static int handle_client( pcap_t* pcap, int con_fd )
 	sigaction(SIGTERM, &exit_action, NULL);
 
 	// start stats reporting thread
-	sstats_t* sstats = sstats_init();
 	pthread_t* thread = NULL;
 	if( log_level_active(LOG_LEVEL_INFO) )
 	{
@@ -201,12 +187,43 @@ static int handle_client( pcap_t* pcap, int con_fd )
 
 	// service socket
 	pcap_packet_t* packet = NULL;
-	static int sof_expected = 1;
+	int sof_expected = 1;
+	const int buffer_size = fmax(HEADER_SIZE, DATA_SIZE_MAX);
+	uint64_t buffer[buffer_size];
+
 	while( 1 )
 	{
-		memset(buffer, 0, buffer_size);
+		int error;
 
-		int error = read_data(con_fd, buffer, read_size);
+		frame_t frame;
+		timestamp_t timestamp;
+		capture_data_t capture_data = {
+			.frame = &frame,
+			.timestamp = &timestamp,
+		};
+
+		// read header
+		memset(buffer, 0, sizeof(buffer));
+		error = read_data(fd, buffer, HEADER_SIZE);
+		if( error == 2 )
+		{ // shutting down
+			break;
+		}
+		else if( error )
+		{
+			report_errno("Unable to header from socket", errno);
+			return 1;
+		}
+
+		log_trace("header ");
+		log_binary_append(LOG_LEVEL_TRACE, buffer, HEADER_SIZE);
+
+		parse_header(&capture_data, buffer);
+
+		// read data
+		size_t data_size = DATA_TIMESTAMP_SIZE + frame_get_size(capture_data.frame);
+		memset(buffer, 0, sizeof(buffer));
+		error = read_data(fd, buffer, data_size);
 		if( error == 2 )
 		{ // shutting down
 			break;
@@ -217,92 +234,76 @@ static int handle_client( pcap_t* pcap, int con_fd )
 			return 1;
 		}
 
-		if( log_level_active(LOG_LEVEL_INFO) )
+		log_trace("data ");
+		log_binary_append(LOG_LEVEL_TRACE, buffer, data_size);
+
+		parse_data(&capture_data, buffer);
+
+		// process capture data
+		// sof
+		assert(sof_expected == frame.sof);
+		if( frame.sof )
 		{
-			print_data((uint8_t*) buffer, read_size);
+			uint64_t seconds;
+			uint64_t nanoseconds;
+
+			if( timestamp_is_valid(&timestamp) )
+			{
+				seconds = timestamp_get_seconds(&timestamp);
+				nanoseconds = timestamp_get_nanoseconds(&timestamp);
+			}
+			else // !timestamp_is_valid(timestamp)
+			{
+				logf_info("WARNING: Using system time due to invalid dfe timestamp (doubt=%d, valid=%d, value=%"PRIu64")\n",
+						  timestamp_get_doubt(&timestamp),
+						  timestamp_is_valid(&timestamp),
+						  timestamp_get_value(&timestamp));
+
+				seconds = time(NULL);
+				nanoseconds = 0;
+			}
+
+			packet = pcap_packet_init(pcap, seconds, nanoseconds);
+			assert(packet != NULL);
+
+			sof_expected = 0;
 		}
 
-		// process data
-		switch( read_mode )
+		// append
+		const uint64_t* data = frame_get_data(&frame);
+		int size = frame_get_size(&frame);
+		pcap_packet_append(packet, data, size);
+
+		// eof
+		if( frame.eof )
 		{
-			case READ_MODE_HEADER:
-			{
-				// reset
-				*(capture_data.timestamp) = TIMESTAMP_EMPTY;
-				*(capture_data.frame) = FRAME_EMPTY;
+			pcap_packet_write(pcap, packet);
+			pcap_flush(pcap);
 
-				// process
-				parse_header(&capture_data, buffer);
+			pcap_packet_free(packet);
+			packet = NULL;
 
-				// config next mode
-				read_mode = READ_MODE_DATA;
-				read_size = DATA_TIMESTAMP_SIZE + frame_get_size(capture_data.frame);
-
-				break;
-			}
-			case READ_MODE_DATA:
-			{
-				// process
-				parse_data(&capture_data, buffer);
-
-				frame_t* frame = capture_data.frame;
-				timestamp_t* timestamp = capture_data.timestamp;
-				size_t size = frame_get_size(frame);
-
-				// sof
-				assert(sof_expected == frame->sof);
-				if( frame->sof )
-				{
-					packet = pcap_packet_init(pcap, timestamp_get_seconds(timestamp), timestamp_get_nanoseconds(timestamp));
-					assert(packet != NULL);
-
-					sof_expected = 0;
-				}
-
-				// append
-				pcap_packet_append(packet, frame_get_data(frame), size);
-
-				// eof
-				if( frame->eof )
-				{
-					pcap_packet_write(pcap, packet);
-					pcap_flush(pcap);
-
-					pcap_packet_free(packet);
-					packet = NULL;
-
-					sof_expected = 1;
-				}
-
-				// update stats
-				stats_t stats = STATS_RESET;
-				stats.frames = 1;
-				stats.bytes = size;
-				stats.packets = (frame->eof == 1) ? 1 : 0;
-
-				sstats_inc(sstats, &stats);
-				sstats_try_update(sstats);
-
-				// config next mode
-				read_mode = READ_MODE_HEADER;
-				read_size = HEADER_SIZE;
-
-				break;
-			}
+			sof_expected = 1;
 		}
+
+		// update stats
+		stats_t stats = STATS_RESET;
+		stats.frames = 1;
+		stats.bytes = size;
+		stats.packets = (frame.eof == 1) ? 1 : 0;
+
+		sstats_inc(sstats, &stats);
+		sstats_try_update(sstats);
 	}
 
 	// cleanup
 	pcap_flush(pcap);
+
 	if( packet != NULL )
 	{
 		pcap_packet_free(packet);
 		packet = NULL;
 	}
-	packet = NULL;
-
-	free(buffer);
-	buffer = NULL;
 
 	sstats_free(sstats);
 	sstats = NULL;
@@ -310,10 +311,13 @@ static int handle_client( pcap_t* pcap, int con_fd )
 	return 0;
 }
 
-static int read_data( int fd, void* buffer, ssize_t read_size )
+static int read_data( int fd, void* buffer, size_t read_size )
 {
+	assert(buffer != NULL);
+
 	uint8_t* buffer8 = (uint8_t*) buffer;
-	ssize_t nbytes = 0;
+	size_t nbytes = 0;
+
 	while( (nbytes < read_size) && !g_shutdown )
 	{
 		// wait w/ timeout for data
@@ -368,24 +372,7 @@ static int read_data( int fd, void* buffer, ssize_t read_size )
 	}
 }
 
-static void print_data( uint8_t* buffer, size_t buffer_size )
-{
-	char str[BUFSIZ];
-	int str_len = 0;
-	str_len += snprintf((str + str_len), BUFSIZ, "read %zdB: ", buffer_size);
-	for( int i=0; (i * sizeof(*buffer))<buffer_size; i++ )
-	{
-		if( i != 0 )
-		{
-			str_len += snprintf((str + str_len), (BUFSIZ - str_len), ".");
-		}
-		str_len += snprintf((str + str_len), (BUFSIZ - str_len), "%02"PRIx8, buffer[i]);
-	}
-	snprintf((str + str_len), (BUFSIZ - str_len), "\n");
-	logf_debug("%s", str);
-}
-
-void parse_header( capture_data_t* data, uint64_t buffer[1] )
+void parse_header( capture_data_t* data, uint64_t* buffer )
 {
 	assert(data != NULL);
 	assert(buffer != NULL);
@@ -407,7 +394,7 @@ void parse_header( capture_data_t* data, uint64_t buffer[1] )
 				frame->mod);
 }
 
-void parse_data( capture_data_t* data, uint64_t buffer[1] )
+void parse_data( capture_data_t* data, uint64_t* buffer )
 {
 	assert(data != NULL);
 	assert(buffer != NULL);

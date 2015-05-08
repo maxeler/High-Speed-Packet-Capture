@@ -1,6 +1,5 @@
 /*
  * utils.c
- *
  */
 
 #include <string.h>
