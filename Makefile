@@ -3,5 +3,5 @@ all-simulation:
 	make -C ./APP/ all-simulation
 
 test: all-simulation
-	cd TESTS && sudo -E ./run_tests.sh
+	cd TESTS && ./run_tests.sh
 

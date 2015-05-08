@@ -13,4 +13,6 @@ then
     exit 1
 fi
 
+echo "Do NOT forget to install the required python packages from requirements.txt"
+
 python ./tests.py
