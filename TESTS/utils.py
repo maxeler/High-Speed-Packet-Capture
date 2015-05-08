@@ -137,6 +137,7 @@ class PacketRecord(object):
         self.__add(self.received_items, packet)
 
     def verify(self):
+        # TODO: switch to using a multiset for items when simulation bug is fixed
         # sort so we can do O(n) comparisons for a total cost of O(nlogn)
         received_items = sorted(self.received_items)
         sent_items = sorted(self.sent_items)
