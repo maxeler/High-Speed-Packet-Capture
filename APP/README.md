@@ -169,7 +169,7 @@ QSFP_TOP_10G_PORT1:
 #### Local Capture
 Start the client in local capture mode.
 ```console
-$ ./PacketCaptureClient -l PCAP-FILE
+$ ./capture_client -l PCAP-FILE
 ```
 
 You should see the client report that packets have been captured.
@@ -177,7 +177,7 @@ You should see the client report that packets have been captured.
 #### Remote Capture
 Before the client can be started the servers must started. Be sure the server's network is accessible by the client via TCP over port 2511. Start the server with the ip it should bind to and the capture file traffic will be written to. Take note of the servers' ip addresses. You will need them later to run the client.
 ```console
-./PacketCaptureServer IP PCAP-FILE
+./capture_client IP PCAP-FILE
 
 ```
 
@@ -193,7 +193,7 @@ PING DFE_IP 56(84) bytes of data.
 Once all servers are running the client is ready to be started with the list of servers it will send capture data to. Remote servers are specified with the `-r` flag followed by the server pool and the server ip. The DFE will send all broadcast traffic to pool A and all other captured traffic to pool B.
 
 ```console
-/PacketCaptureClient -rA POOLA_IP1 -rB POOLB_IP1 -rA POOLA_IP2 -rB POOLB_IP2 ...
+/capture_client -rA POOLA_IP1 -rB POOLB_IP1 -rA POOLA_IP2 -rB POOLB_IP2 ...
 ```
 
 You should see the client report that a connection has been established to each of the servers and the servers should report that a client has connected. The servers will report the total number of packets received as data is sent to them.

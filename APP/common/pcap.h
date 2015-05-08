@@ -1,6 +1,5 @@
 /*
  * pcap.h
- *
  */
 
 #ifndef PCAP_H_

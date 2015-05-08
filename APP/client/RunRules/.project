@@ -20,4 +20,15 @@
 		<nature>com.maxeler.maxcompiler.core.maxCompilerNature</nature>
 		<nature>com.maxeler.maxcompiler.core.MaxCompilerFragmentNature</nature>
 	</natures>
+	<filteredResources>
+		<filter>
+			<id>0</id>
+			<name>IKON</name>
+			<type>24</type>
+			<matcher>
+				<id>org.eclipse.ui.ide.patternFilterMatcher</id>
+				<arguments>.svn</arguments>
+			</matcher>
+		</filter>
+	</filteredResources>
 </projectDescription>

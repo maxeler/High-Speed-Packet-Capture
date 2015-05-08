@@ -1,7 +1,7 @@
 /*
  * capture_data.c
- *
  */
+
 #include <stdlib.h>
 #include <inttypes.h>
 #include <assert.h>
@@ -14,7 +14,6 @@ struct capture_data_s
 	timestamp_t* timestamp;
 	frame_t* frame;
 };
-
 
 /*
  * Create time stamp from CPU capture data bits.
@@ -61,6 +60,7 @@ capture_data_t* capture_data_parse( uint64_t data[4] )
 	this->frame = parse_frame(data);
 	if( this->timestamp == NULL || this->frame == NULL )
 	{
+		capture_data_free(this);
 		return NULL;
 	}
 

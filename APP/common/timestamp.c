@@ -1,6 +1,7 @@
 /*
  * timestamp.c
  */
+
 #include <stdlib.h>
 #include <inttypes.h>
 #include <assert.h>
@@ -8,12 +9,11 @@
 
 #include "timestamp.h"
 
-
-timestamp_t TIMESTAMP_EMPTY = {0};
+const timestamp_t TIMESTAMP_EMPTY = {0, 0, 0};
 
 timestamp_t* timestamp_init( int doubt, int valid, uint64_t value )
 {
-	timestamp_t* this = malloc(sizeof(timestamp_t));
+	timestamp_t* this = malloc(sizeof(*this));
 	if( this == NULL )
 	{
 		return NULL;
@@ -31,6 +31,7 @@ void timestamp_free( timestamp_t* this )
 	assert(this != NULL);
 
 	free(this);
+	this = NULL;
 }
 
 unsigned int timestamp_get_doubt( timestamp_t* this )
@@ -56,15 +57,21 @@ uint64_t timestamp_get_value( timestamp_t* this )
 
 time_t timestamp_get_seconds( timestamp_t* this )
 {
+	assert(this != NULL);
+
 	return this->value / ((uint64_t) 1e8);
 }
 
 uint32_t timestamp_get_nanoseconds( timestamp_t* this )
 {
+	assert(this != NULL);
+
 	return (this->value % ((uint64_t) 1e8)) * 1e1;
 }
 
 suseconds_t timestamp_get_microseconds( timestamp_t* this )
 {
+	assert(this != NULL);
+
 	return timestamp_get_nanoseconds(this) / ((uint64_t) 1e3);
 }

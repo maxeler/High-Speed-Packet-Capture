@@ -10,3 +10,7 @@ RunRules/*/debug
 RunRules/*/include
 RunRules/*/maxfiles
 RunRules/*/objects
+
+*.pyc
+*~
+*.pcap

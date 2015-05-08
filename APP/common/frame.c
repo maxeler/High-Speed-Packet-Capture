@@ -1,6 +1,5 @@
 /*
  * frame_part.c
- *
  */
 
 #include <inttypes.h>
@@ -60,19 +59,7 @@ ssize_t frame_get_size( frame_t* this )
 {
 	assert(this != NULL);
 
-	ssize_t data_size = sizeof(this->data);
-
-	int size;
-	if( this->mod == 0 )
-	{ // full partial frame
-		size = data_size;
-	}
-	else // part->mod != 0
-	{
-		size = this->mod;
-	}
-
-	return size;
+	return this->mod == 0 ? sizeof(this->data) : this->mod;
 }
 
 const uint64_t* frame_get_data( frame_t* this )

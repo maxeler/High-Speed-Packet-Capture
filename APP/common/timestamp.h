@@ -15,22 +15,22 @@ typedef struct timestamp_s
 	uint64_t value;
 } timestamp_t;
 
-extern timestamp_t TIMESTAMP_EMPTY;
+extern const timestamp_t TIMESTAMP_EMPTY;
 
 timestamp_t* timestamp_init( int doubt, int valid, uint64_t value );
 
-void timestamp_free( timestamp_t* this );
+void timestamp_free( timestamp_t* timestamp );
 
-unsigned int timestamp_get_doubt( timestamp_t* this );
+unsigned int timestamp_get_doubt( timestamp_t* timestamp );
 
-unsigned int timestamp_is_valid( timestamp_t* this );
+unsigned int timestamp_is_valid( timestamp_t* timestamp );
 
-uint64_t timestamp_get_value( timestamp_t* this );
+uint64_t timestamp_get_value( timestamp_t* timestamp );
 
-time_t timestamp_get_seconds( timestamp_t* this );
+time_t timestamp_get_seconds( timestamp_t* timestamp );
 
-suseconds_t timestamp_get_microseconds( timestamp_t* this );
+suseconds_t timestamp_get_microseconds( timestamp_t* timestamp );
 
-uint32_t timestamp_get_nanoseconds( timestamp_t* this );
+uint32_t timestamp_get_nanoseconds( timestamp_t* timestamp );
 
 #endif /* TIMESTAMP_H_ */

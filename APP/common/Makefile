@@ -3,7 +3,7 @@ LIB_NAME := common
 DEFINE_FLAGS :=
 BUILD_FLAGS := -Wall -Werror -pedantic -std=gnu99 -fgnu89-inline -fPIC
 DEBUG_FLAGS := -g
-CFLAGS := $(DEBUG_FLAGS) $(BUILD_FLAGS) $(DEFINE_FLAGS) -I. -lm
+CFLAGS := $(DEBUG_FLAGS) $(BUILD_FLAGS) $(DEFINE_FLAGS) -I. -lm -pthread
 OBJ_DIR := .objects
 
 CC := gcc

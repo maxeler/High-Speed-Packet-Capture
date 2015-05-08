@@ -1,6 +1,5 @@
 /*
  * pcap.c
- *
  */
 
 #include <stdlib.h>
@@ -51,19 +50,31 @@ struct pcap_s
 
 static int globalh_write( globalh_t* header, FILE* file )
 {
+	assert(header != NULL);
+	assert(file != NULL);
+
 	fwrite(header, sizeof(*header), 1, file);
+
 	return 0;
 }
 
 static int frameh_write( packeth_t* header, FILE* file )
 {
+	assert(header != NULL);
+	assert(file != NULL);
+
 	fwrite(header, sizeof(*header), 1, file);
+
 	return 0;
 }
 
 static int frame_data_write( const uint64_t* data, ssize_t size, FILE* file )
 {
+	assert(data != NULL);
+	assert(file != NULL);
+
 	fwrite(data, size, 1, file);
+
 	return 0;
 }
 
@@ -71,10 +82,26 @@ pcap_t* pcap_init( FILE* file, int32_t  thiszone, uint32_t network, uint32_t sig
 {
 	assert(file != NULL);
 
-	// global header
-	globalh_t* header = malloc(sizeof(*header));
-	assert(header != NULL);
+	pcap_t* this = malloc(sizeof(*this));
+	if( this == NULL )
+	{
+		return NULL;
+	}
 
+	this->header = malloc(sizeof(*this->header));
+	if( this->header == NULL )
+	{
+		pcap_free(this);
+		this = NULL;
+
+		return NULL;
+	}
+
+	// init this
+	this->file = file;
+
+	// init header
+	globalh_t* header = this->header;
 	header->version_major = VERSION_MAJOR;
 	header->version_minor = VERSION_MINOR;
 	header->magic_number = MAGIC_NUMBER;
@@ -83,115 +110,143 @@ pcap_t* pcap_init( FILE* file, int32_t  thiszone, uint32_t network, uint32_t sig
 	header->sigfigs = sigfigs;
 	header->snaplen = snaplen;
 
-	// pcap
-	pcap_t* pcap = malloc(sizeof(*pcap));
-	assert(pcap != NULL);
-
-	pcap->header = header;
-	pcap->file = file;
-
 	// write global header
 	int error = globalh_write(header, file);
 	if( error )
 	{
+		pcap_free(this);
+		this = NULL;
+
 		return NULL;
 	}
 
-	return pcap;
+	return this;
 }
 
 pcap_packet_t* pcap_packet_init( pcap_t* pcap, uint32_t ts_sec, uint32_t ts_nsec )
 {
-	packeth_t* header = malloc(sizeof(*header));
-	assert(header != NULL);
+	assert(pcap != NULL);
 
+	pcap_packet_t* this = malloc(sizeof(*this));
+	if( this == NULL )
+	{
+		return NULL;
+	}
+
+	this->header = malloc(sizeof(*this->header));
+	if( this->header == NULL )
+	{
+		pcap_packet_free(this);
+		this = NULL;
+
+		return NULL;
+	}
+
+	// init this
+	this->max_len = pcap->header->snaplen;
+	this->finalized = 0;
+
+	this->data = malloc(this->max_len);
+	if( this->data == NULL )
+	{
+		pcap_packet_free(this);
+		this = NULL;
+
+		return NULL;
+	}
+
+	// init header
+	packeth_t* header = this->header;
 	header->ts_sec = ts_sec;
 	header->ts_nsec = ts_nsec;
 	header->orig_len = 0;
 	header->incl_len = 0;
 
-	pcap_packet_t* packet = malloc(sizeof(*packet));
-	assert(packet != NULL);
-	packet->header = header;
-	packet->max_len = pcap->header->snaplen;
-	packet->data = malloc(packet->max_len);
-	assert(packet->data != NULL);
-	packet->finalized = 0;
-
-	return packet;
+	return this;
 }
 
-void pcap_packet_append( pcap_packet_t* packet, const uint64_t* data, uint32_t size )
+void pcap_packet_append( pcap_packet_t* this, const uint64_t* data, uint32_t size )
 {
-	assert(packet != NULL);
+	assert(this != NULL);
 	assert(data != NULL);
-	assert(!packet->finalized);
+	assert(!this->finalized);
 
 	if( size != sizeof(*data))
 	{
-		packet->finalized = 1;
+		this->finalized = 1;
 	}
 
-	packeth_t* header = packet->header;
+	packeth_t* header = this->header;
 	header->orig_len += size;
 
-	if( header->incl_len < packet->max_len )
+	if( header->incl_len < this->max_len )
 	{ // within snaplen
-		int index = header->incl_len / sizeof(*(packet->data));
-		memcpy(&packet->data[index], data, size);
+		int index = header->incl_len / sizeof(*this->data);
+		memcpy(&this->data[index], data, size);
 
 		header->incl_len += size;
 	}
 }
 
-int pcap_packet_write( pcap_t* pcap, pcap_packet_t* packet )
+int pcap_packet_write( pcap_t* this, pcap_packet_t* packet )
 {
+	assert(this != NULL);
+	assert(packet != NULL);
+
 	int error;
 
-	error = frameh_write(packet->header, pcap->file);
-	if( error ) return error;
+	error = frameh_write(packet->header, this->file);
+	if( error )
+	{
+		return error;
+	}
 
-	error = frame_data_write(packet->data, packet->header->incl_len, pcap->file);
-	if( error ) return error;
+	error = frame_data_write(packet->data, packet->header->incl_len, this->file);
+	if( error )
+	{
+		return error;
+	}
 
 	return 0;
 }
 
-int pcap_flush( pcap_t* pcap )
+int pcap_flush( pcap_t* this )
 {
-	return fflush(pcap->file);
+	assert(this != NULL);
+
+	return fflush(this->file);
 }
 
-void pcap_packet_free( pcap_packet_t* packet )
+void pcap_packet_free( pcap_packet_t* this )
 {
-	assert(packet != NULL);
+	assert(this != NULL);
 
-	if( packet->header != NULL )
+	if( this->header != NULL )
 	{
-		free(packet->header);
-		packet->header = NULL;
+		free(this->header);
+		this->header = NULL;
 	}
 
-	if( packet->data != NULL )
+	if( this->data != NULL )
 	{
-		free(packet->data);
-		packet->data = NULL;
+		free(this->data);
+		this->data = NULL;
 	}
 
-	free(packet);
-	packet = NULL;
+	free(this);
+	this = NULL;
 }
 
-void pcap_free( pcap_t* pcap )
+void pcap_free( pcap_t* this )
 {
-	assert(pcap != NULL);
+	assert(this != NULL);
 
-	if( pcap->header != NULL )
+	if( this->header != NULL )
 	{
-		free(pcap->header);
-		pcap->header = NULL;
+		free(this->header);
+		this->header = NULL;
 	}
 
-	free(pcap);
-	pcap = NULL;
+	free(this);
+	this = NULL;
 }

@@ -12,8 +12,8 @@ $ make RUNRULE=... build
 ## Run
 ```console
 $ cd RuneRules/RUNRULE/binaries
-$ ./PacketCaptureClient --help                                                              
-Usage: PacketCaptureClient [OPTION...] [dfe-ip dfe-netmask]
+$ ./capture_client --help                                                              
+Usage: capture_client [OPTION...] [dfe-ip dfe-netmask]
 
   -l, --local=pcap-file      Enable local write mode
   -r, --remote=type ip       Enable remote write mode
@@ -24,5 +24,5 @@ Usage: PacketCaptureClient [OPTION...] [dfe-ip dfe-netmask]
 ```
 
 ```console
-$ ./PacketCaptureClient 5.5.5.2 255.255.255.0 -l capture.pcap -rA 5.5.5.3 -rA 5.5.5.4 -rB 5.5.5.5
+$ ./capture_client 5.5.5.2 255.255.255.0 -l capture.pcap -rA 5.5.5.3 -rA 5.5.5.4 -rB 5.5.5.5
 ```
